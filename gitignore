@@ -1,0 +1,5 @@
+.git*
+*.pfd
+venv
+*.db
+*-wip
