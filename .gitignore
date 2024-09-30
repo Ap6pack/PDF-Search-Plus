@@ -1,4 +1,5 @@
-/pdf_crud_gui.py-wip
-/pdf_data.db
-/userInterface.py-wip
-/venv
+.git*
+*.pfd
+venv
+*.db
+*-wip
