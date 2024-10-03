@@ -1,5 +1,6 @@
 import os
 import io
+import re  # Regular expressions for exact keyword matching
 import fitz  # PyMuPDF
 from PIL import Image
 import sqlite3
@@ -36,18 +37,26 @@ def insert_keyword_result(conn, pdf_id, page_number, keyword, context):
 
 
 def search_keywords_in_text(text, keywords):
+    """Search for exact keyword matches in the provided text."""
     results = {}
+
+    # Iterate over each keyword to find exact matches
     for keyword in keywords:
         keyword = keyword.lower()
-        if keyword in text.lower():
+        # Use regular expression to match whole words, case-insensitive
+        pattern = r'\b' + re.escape(keyword) + r'\b'
+        matches = re.findall(pattern, text, flags=re.IGNORECASE)
+
+        if matches:
+            # Collect surrounding context (line where the match was found)
             occurrences = []
             for line in text.splitlines():
-                if keyword in line.lower():
+                if re.search(pattern, line, flags=re.IGNORECASE):
                     occurrences.append(line.strip())
             if occurrences:
                 results[keyword] = occurrences
-    return results
 
+    return results
 
 def process_pdf(conn, pdf_path, keyword_list):
     # Extract the filename without extension and path
