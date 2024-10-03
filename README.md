@@ -1,6 +1,6 @@
 # PDFSearchPlus
 
-**PDFSearchPlus** is a Python-based application designed to help you extract, search, and manage data from PDF files. It allows users to extract text, images, and keywords from PDFs, store the extracted information in an SQLite database, and search the content by keywords and context. Additionally, users can preview PDF pages and navigate directly to where the keywords were found.
+**PDFSearchPlus** is a Python-based application designed to help you extract, search, and manage data from PDF files. It allows users to extract text, images, and keywords from PDFs, store the extracted information in an SQLite database, and search the content by keywords and context. Additionally, users can preview PDF pages, navigate directly to where the keywords were found, zoom in/out of the PDF, and navigate between pages with ease.
 
 ## Features
 
@@ -8,7 +8,11 @@
 - **Mass scanning**: Process multiple PDF files from a folder at once.
 - **Keyword and context search**: Search the extracted content by keywords and view the surrounding context.
 - **PDF preview**: Open and preview the exact page in a PDF where the keyword was found.
+- **Page navigation**: Move forward or backward between pages in the PDF.
+- **Zoom functionality**: Zoom in and out to adjust the view of the PDF page preview.
 - **Database integration**: Store extracted data in an SQLite database for quick access and searching.
+- **Threaded search**: Perform searches without freezing the user interface.
+- **Logging**: Errors are logged for easy debugging and tracing.
 - **GUI-based user interface**: Easy-to-use interface with keyword search and PDF preview capabilities.
 
 ## Table of Contents
@@ -91,6 +95,14 @@ This will open a graphical user interface where you can:
 - Search for keywords or context in the database.
 - View search results, including the PDF file, page number, keyword, and context.
 - Open and preview the corresponding PDF at the exact page where the keyword is found.
+- Navigate between pages of the PDF using "Next" and "Previous" buttons.
+- Zoom in and out of the PDF for better viewing.
+
+### New Features
+
+- **Page Navigation**: Easily move between pages of the PDF with the "Next" and "Previous" buttons.
+- **Zoom In/Out**: Adjust the preview size with "Zoom In" and "Zoom Out" buttons.
+- **Threaded Search**: The search function now runs in the background, keeping the interface responsive while querying the database.
 
 ## Screenshots
 
@@ -115,5 +127,3 @@ Contributions are welcome! If you'd like to contribute to **PDFSearchPlus**, ple
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
