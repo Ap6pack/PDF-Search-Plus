@@ -2,20 +2,26 @@ import os
 import sqlite3
 import fitz  # PyMuPDF
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, Canvas
+from tkinter import ttk, messagebox, Canvas
 from PIL import Image, ImageTk
-import subprocess
 import threading  # For threading long operations
+import logging
+
+# Configure logging to track errors
+logging.basicConfig(filename='app.log', level=logging.ERROR)
+
 class PDFSearchApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Search and Preview")
-        self.root.geometry("")
+        self.root.geometry("800x600")  # Default window size
+
         # PDF state
         self.current_pdf = None
-        self.page_number = 0
+        self.page_number = 1
         self.total_pages = 0
         self.zoom_factor = 1.0
+
         # Initialize UI components
         self.create_widgets()
 
@@ -46,7 +52,7 @@ class PDFSearchApp:
         # Embedded PDF preview using a Canvas
         self.canvas_frame = tk.Frame(self.root)
         self.canvas_frame.grid(row=1, column=4, columnspan=4, padx=10, pady=10, sticky='nsew')
-        self.canvas = Canvas(self.canvas_frame, width=600, height=700)
+        self.canvas = Canvas(self.canvas_frame, width=600, height=800)
         self.canvas.grid(row=0, column=0, sticky='nsew')
 
         # Controls for page navigation, zoom, and preview
@@ -59,46 +65,34 @@ class PDFSearchApp:
         self.btn_next = tk.Button(frame_controls, text="Next Page", command=self.next_page)
         self.btn_next.grid(row=0, column=1, padx=5)
 
-        self.btn_zoom_in = tk.Button(frame_controls, text="Zoom In", command=self.zoom_in)
+        self.btn_zoom_in = tk.Button(frame_controls, text="Zoom In", command=lambda: self.update_zoom_factor(0.1))
         self.btn_zoom_in.grid(row=0, column=2, padx=5)
 
-        self.btn_zoom_out = tk.Button(frame_controls, text="Zoom Out", command=self.zoom_out)
+        self.btn_zoom_out = tk.Button(frame_controls, text="Zoom Out", command=lambda: self.update_zoom_factor(-0.1))
         self.btn_zoom_out.grid(row=0, column=3, padx=5)
 
-        self.btn_open = tk.Button(frame_controls, text="Open PDF", command=self.load_selected_pdf)
-        self.btn_open.grid(row=0, column=4, padx=5)
-
-        # Add "Preview PDF" button to preview selected PDF
         self.btn_preview = tk.Button(frame_controls, text="Preview PDF", command=self.preview_selected_pdf)
-        self.btn_preview.grid(row=0, column=5, padx=5)
+        self.btn_preview.grid(row=0, column=4, padx=5)
 
         # Make sure the layout expands properly
         self.root.grid_rowconfigure(1, weight=1)  # Make row 1 (tree and canvas) expandable
         self.root.grid_columnconfigure(0, weight=1)  # Make treeview expand
         self.root.grid_columnconfigure(4, weight=1)  # Make canvas column expandable
 
-    def pdf_path(self, pdf_id):
-        """Get the file path for a PDF given its ID."""
+    def get_pdf_path(self, pdf_id):
+        """Fetch the PDF file path for a given ID."""
         try:
             result = self.execute_query("SELECT file_path FROM pdf_files WHERE id = ?", (pdf_id,))
             if result:
-                return result[0][0]  # Extract the first item from the result (file path)
+                return result[0][0]
             return None
         except sqlite3.DatabaseError as e:
+            logging.error(f"Database error: {e}")
             messagebox.showerror("Database Error", str(e))
             return None
 
-    def load_selected_pdf(self, pdf_id):
-        """Load the selected PDF given its ID."""
-        pdf_path = self.pdf_path(pdf_id)  # Fetch the PDF path using the ID
-
-        if pdf_path:
-            self.load_pdf(pdf_path, 1)  # Load the selected PDF and display the first page
-        else:
-            messagebox.showerror("File Not Found", "The selected PDF file could not be found.")
-
     def load_pdf(self, pdf_path, page_number=1):
-        """Load the selected PDF and set the current page."""
+        """Load the selected PDF and display the provided page number."""
         if not os.path.exists(pdf_path):
             messagebox.showerror("File Not Found", f"The file {pdf_path} does not exist.")
             return
@@ -106,37 +100,60 @@ class PDFSearchApp:
         try:
             self.current_pdf = pdf_path  # Store the current PDF path
             doc = fitz.open(pdf_path)
-            self.total_pages = len(doc)
+            self.total_pages = len(doc)  # Set the total number of pages
             self.page_number = page_number  # Start at the provided page number
-            self.show_pdf_page(pdf_path, page_number)
+            print(f"Loaded PDF: {pdf_path}, Total Pages: {self.total_pages}, Start Page: {self.page_number}")
+            self.show_pdf_page(page_number)
         except Exception as e:
+            logging.error(f"Error opening PDF: {e}")
             messagebox.showerror("Error", f"An error occurred while opening the PDF: {e}")
 
-    def prev_page(self):
-        """Go to the previous page in the PDF preview."""
-        if self.current_pdf and self.page_number > 1:
-            self.page_number -= 1
-            self.show_pdf_page(self.current_pdf, self.page_number)
+    def preview_selected_pdf(self):
+        """Preview the selected PDF and display the corresponding page in the embedded canvas."""
+        selected_item = self.tree.focus()
+        if not selected_item:
+            messagebox.showwarning("Select an item", "Please select a search result first.")
+            return
+
+        selected_row = self.tree.item(selected_item)['values']
+        pdf_id = selected_row[0]
+        page_number = selected_row[2]  # This is the page number you want to preview
+        pdf_path = self.get_pdf_path(pdf_id)
+
+        if pdf_path:
+            self.load_pdf(pdf_path, page_number)
+        else:
+            messagebox.showerror("File Not Found", "The selected PDF file could not be found.")
 
     def next_page(self):
         """Go to the next page in the PDF preview."""
         if self.current_pdf and self.page_number < self.total_pages:
             self.page_number += 1
-            self.show_pdf_page(self.current_pdf, self.page_number)
+            print(f"Next Page: {self.page_number} of {self.total_pages}")
+            self.show_pdf_page(self.page_number)
+        else:
+            print(f"Already on the last page: {self.page_number} of {self.total_pages}")
+            messagebox.showinfo("Navigation", "You are already on the last page.")
 
-    def zoom_in(self):
-        """Zoom in on the PDF preview."""
-        self.zoom_factor += 0.1
-        self.show_pdf_page(self.current_pdf, self.page_number)
+    def prev_page(self):
+        """Go to the previous page in the PDF preview."""
+        if self.current_pdf and self.page_number > 1:
+            self.page_number -= 1
+            print(f"Previous Page: {self.page_number} of {self.total_pages}")
+            self.show_pdf_page(self.page_number)
+        else:
+            print(f"Already on the first page: {self.page_number}")
+            messagebox.showinfo("Navigation", "You are already on the first page.")
 
-    def zoom_out(self):
-        """Zoom out on the PDF preview."""
-        if self.zoom_factor > 0.1:
-            self.zoom_factor -= 0.1
-            self.show_pdf_page(self.current_pdf, self.page_number)
+    def update_zoom_factor(self, delta):
+        """Update zoom factor by a given delta and refresh the current page."""
+        new_zoom = self.zoom_factor + delta
+        if 0.5 <= new_zoom <= 3.0:  # Set a range for zoom factor
+            self.zoom_factor = new_zoom
+            self.show_pdf_page(self.page_number)  # Keep the current page number when zooming
 
     def search_keywords(self):
-        """Search the database for keywords and context (case-insensitive)."""
+        """Search the database for keywords and context."""
         keyword = self.keyword_entry.get().lower()
         context = self.context_entry.get().lower()
 
@@ -147,21 +164,21 @@ class PDFSearchApp:
             JOIN pdf_files ON keywords.pdf_id = pdf_files.id 
             WHERE 1=1
             """
-
             params = []
 
             if keyword:
-                query += " AND LOWER(keywords.keyword) = ?"  # Convert the column to lowercase
+                query += " AND LOWER(keywords.keyword) = ?"
                 params.append(keyword)
 
             if context:
-                query += " AND LOWER(keywords.context) LIKE ?"  # Convert the column to lowercase for LIKE search
+                query += " AND LOWER(keywords.context) LIKE ?"
                 params.append(f'%{context}%')
 
             try:
                 rows = self.execute_query(query, params)
                 self.root.after(0, self.update_treeview, rows)  # Safely update Treeview
             except sqlite3.DatabaseError as e:
+                logging.error(f"Database error: {e}")
                 self.root.after(0, lambda: messagebox.showerror("Database Error", str(e)))
 
         threading.Thread(target=search_db).start()
@@ -173,78 +190,26 @@ class PDFSearchApp:
             self.tree.insert("", tk.END, values=row)
 
     def execute_query(self, query, params=()):
-        """Execute a query with the given parameters and return the result."""
-        with sqlite3.connect('pdf_data.db') as conn:
+        """Execute a database query with given parameters."""
+        with sqlite3.connect('pdf_data.db', check_same_thread=False) as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
             return cursor.fetchall()
 
-    def preview_selected_pdf(self):
-        """Preview the selected PDF and display the corresponding page in the embedded canvas."""
-        selected_item = self.tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Select an item", "Please select a search result first.")
-            return
-
-        # Get selected search result
-        selected_row = self.tree.item(selected_item)['values']
-        pdf_id = selected_row[0]
-        page_number = selected_row[2]
-
-        pdf_path = self.get_pdf_path(pdf_id)
-
-        if pdf_path:
-            self.show_pdf_page(pdf_path, page_number)
-        else:
-            messagebox.showerror("File Not Found", "The selected PDF file could not be found.")
-
-    def open_pdf_externally(self):
-        """Open the selected PDF in the system's default PDF viewer."""
-        selected_item = self.tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Select an item", "Please select a search result first.")
-            return
-
-        # Get selected search result
-        selected_row = self.tree.item(selected_item)['values']
-        pdf_id = selected_row[0]
-        page_number = selected_row[2]
-
-        pdf_path = self.get_pdf_path(pdf_id)
-
-        if pdf_path:
-            try:
-                if os.name == 'nt':  # For Windows
-                    os.startfile(pdf_path)
-                elif os.name == 'posix':  # For Mac and Linux
-                    subprocess.call(('xdg-open', pdf_path))
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to open the file: {e}")
-        else:
-            messagebox.showerror("File Not Found", "The selected PDF file could not be found.")
-
-    def get_pdf_path(self, pdf_id):
-        """Get the file path for a PDF given its ID."""
-        try:
-            result = self.execute_query("SELECT file_path FROM pdf_files WHERE id = ?", (pdf_id,))
-            if result:
-                return result[0][0]  # Extract the first item from the result
-            return None
-        except sqlite3.DatabaseError as e:
-            messagebox.showerror("Database Error", str(e))
-            return None
-
-    def show_pdf_page(self, pdf_path, page_number):
+    def show_pdf_page(self, page_number):
         """Display the selected PDF page in the embedded Canvas."""
-        if not os.path.exists(pdf_path):
-            messagebox.showerror("File Not Found", f"The file {pdf_path} does not exist.")
+        if self.current_pdf is None:
+            messagebox.showerror("Error", "No PDF file loaded.")
+            return
+
+        if not os.path.exists(self.current_pdf):
+            messagebox.showerror("File Not Found", f"The file {self.current_pdf} does not exist.")
             return
 
         try:
-            doc = fitz.open(pdf_path)
+            doc = fitz.open(self.current_pdf)
             page_index = page_number - 1  # Page number starts from 1
 
-            # Ensure the page number is valid
             if 0 <= page_index < len(doc):
                 page = doc.load_page(page_index)
                 pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
@@ -261,7 +226,8 @@ class PDFSearchApp:
             else:
                 messagebox.showerror("Page Not Found", f"Page {page_number} is not valid.")
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred while opening the PDF: {e}")
+            logging.error(f"Error displaying PDF page: {e}")
+            messagebox.showerror("Error", f"An error occurred while displaying the PDF page: {e}")
 
     def clear_tree(self):
         """Clear the treeview."""
