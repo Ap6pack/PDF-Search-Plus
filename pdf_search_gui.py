@@ -135,10 +135,6 @@ class PDFSearchApp:
             self.zoom_factor -= 0.1
             self.show_pdf_page(self.current_pdf, self.page_number)
 
-        # Buttons to open PDF and preview
-        #tk.Button(self.root, text="Preview Selected PDF", command=self.preview_selected_pdf).grid(row=4, column=0, columnspan=2, padx=10, pady=10)
-        #tk.Button(self.root, text="Open PDF Externally", command=self.open_pdf_externally).grid(row=5, column=0, columnspan=2, padx=10, pady=10)
-    
     def search_keywords(self):
         """Search the database for keywords and context (case-insensitive)."""
         keyword = self.keyword_entry.get().lower()
