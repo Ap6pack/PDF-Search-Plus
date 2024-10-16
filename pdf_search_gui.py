@@ -8,13 +8,13 @@ import threading  # For threading long operations
 import logging
 
 # Configure logging to track errors
-logging.basicConfig(filename='app.log', level=logging.ERROR)
+logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class PDFSearchApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Search and Preview")
-        self.root.geometry("800x600")  # Default window size
+        self.root.geometry("")  # Default window size
 
         # PDF state
         self.current_pdf = None
@@ -109,7 +109,7 @@ class PDFSearchApp:
             messagebox.showerror("Error", f"An error occurred while opening the PDF: {e}")
 
     def preview_selected_pdf(self):
-        """Preview the selected PDF and display the corresponding page in the embedded canvas."""
+        """Preview the selected PDF and display the corresponding page with keyword highlighting."""
         selected_item = self.tree.focus()
         if not selected_item:
             messagebox.showwarning("Select an item", "Please select a search result first.")
@@ -118,10 +118,15 @@ class PDFSearchApp:
         selected_row = self.tree.item(selected_item)['values']
         pdf_id = selected_row[0]
         page_number = selected_row[2]  # This is the page number you want to preview
+        keyword = selected_row[3]      # Get the keyword from the search result
         pdf_path = self.get_pdf_path(pdf_id)
 
         if pdf_path:
-            self.load_pdf(pdf_path, page_number)
+            # Use the load_pdf method to set self.current_pdf, self.page_number, and self.total_pages
+            self.load_pdf(pdf_path, page_number=page_number)
+            print(f"Previewing PDF: {pdf_path}, Starting at Page: {self.page_number}, Highlighting: {keyword}")
+            # Now display the page with the keyword highlighted
+            self.show_pdf_page(self.page_number, keyword)
         else:
             messagebox.showerror("File Not Found", "The selected PDF file could not be found.")
 
@@ -196,8 +201,8 @@ class PDFSearchApp:
             cursor.execute(query, params)
             return cursor.fetchall()
 
-    def show_pdf_page(self, page_number):
-        """Display the selected PDF page in the embedded Canvas."""
+    def show_pdf_page(self, page_number, keyword=None):
+        """Display the selected PDF page in the embedded Canvas and highlight the keyword."""
         if self.current_pdf is None:
             messagebox.showerror("Error", "No PDF file loaded.")
             return
@@ -212,8 +217,18 @@ class PDFSearchApp:
 
             if 0 <= page_index < len(doc):
                 page = doc.load_page(page_index)
-                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
 
+                # Optionally highlight the keyword
+                if keyword:
+                    instances = self.highlight_keywords(page, keyword)
+
+                    # If any keyword is found, focus on the first occurrence
+                    if instances:
+                        x0, y0, x1, y1 = instances[0]  # Get coordinates of the first found instance
+                        self.canvas.yview_moveto(y0 / page.rect.height)  # Scroll to that position
+
+                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
+                
                 # Convert to a PIL Image
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
@@ -228,6 +243,19 @@ class PDFSearchApp:
         except Exception as e:
             logging.error(f"Error displaying PDF page: {e}")
             messagebox.showerror("Error", f"An error occurred while displaying the PDF page: {e}")
+
+
+    def highlight_keywords(self, page, keyword):
+        """Highlight all occurrences of the keyword on the page."""
+        text_instances = page.search_for(keyword)
+        
+        for inst in text_instances:
+            # Add a highlight annotation
+            highlight = page.add_highlight_annot(inst)
+            highlight.update()
+
+        return text_instances  # Return the coordinates of found instances
+
 
     def clear_tree(self):
         """Clear the treeview."""
