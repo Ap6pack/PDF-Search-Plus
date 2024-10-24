@@ -5,7 +5,7 @@ This Python application processes PDF files by extracting text from the pages an
 ## Features
 
 - Extracts and stores text from PDF pages.
-- Extracts images from PDF pages and applies OCR using Tesseract.
+- Extracts images from PDF pages and applies OCR using **Tesseract** or **EasyOCR**.
 - Stores image metadata and OCR-extracted text into the SQLite database.
 - Provides a user-friendly GUI for searching through the stored data, including PDF text and OCR text.
 - Allows for both single-file and folder-based (batch) PDF processing.
@@ -18,18 +18,24 @@ Before running the application, you need to install the following dependencies:
 - Python 3.x
 - [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/en/latest/)
 - [Pillow (PIL)](https://pillow.readthedocs.io/en/stable/)
-- [pytesseract](https://pypi.org/project/pytesseract/)
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (must be installed separately)
+- Either:
+  - **Tesseract** (for Tesseract-based OCR)
+  - **EasyOCR** (for users who can't install Tesseract)
 
 ### Installation Instructions
 
 1. Install the required Python packages using `pip`:
 
-   ```bash
-   pip install pymupdf Pillow pytesseract
-   ```
+   - For **Tesseract** users:
+     ```bash
+     pip install pymupdf Pillow pytesseract
+     ```
+   - For **EasyOCR** users:
+     ```bash
+     pip install pymupdf Pillow easyocr
+     ```
 
-2. Install Tesseract OCR:
+2. **Tesseract OCR Installation** (if using Tesseract):
 
    - On **Ubuntu**:
      ```bash
@@ -42,7 +48,19 @@ Before running the application, you need to install the following dependencies:
    - On **Windows**:
      Download and install from [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki).
 
-3. Ensure that `tesseract` is in your system’s PATH.
+3. Ensure that `tesseract` is in your system’s PATH if using Tesseract.
+
+### Using `pdf_processor_easyocr.py`
+
+For users who cannot install **Tesseract** on Windows or prefer a simpler setup, we provide the alternative `pdf_processor_easyocr.py` script, which uses **EasyOCR** for OCR extraction instead of Tesseract.
+
+- To run the version of the app using **EasyOCR**, simply execute:
+  
+  ```bash
+  python pdf_processor_easyocr.py
+  ```
+
+This will provide the same functionality without requiring the user to install Tesseract.
 
 ### Database Schema
 
@@ -95,13 +113,17 @@ The application stores PDF data in an SQLite database called `pdf_data.db`. The 
 
 1. **Running the Application**:
 
-   To start the application, run the `main()` function in the script:
+   - To start the **Tesseract-based** version of the application, run the `main()` function in the `pdf_search_gui.py` script:
 
-   ```bash
-   python pdf_search_gui.py
-   ```
+     ```bash
+     python pdf_search_gui.py
+     ```
 
-   This will launch a GUI allowing you to process PDF files and search their contents.
+   - To start the **EasyOCR-based** version of the application, run the `main()` function in `pdf_processor_easyocr.py`:
+
+     ```bash
+     python pdf_processor_easyocr.py
+     ```
 
 2. **Processing PDF Files**:
 
@@ -121,7 +143,9 @@ The application stores PDF data in an SQLite database called `pdf_data.db`. The 
 
 ### Code Structure
 
-- **PDF Processing**: The script uses `PyMuPDF` (fitz) to extract text and images from PDF files. The images are passed through `pytesseract` to perform OCR, and the extracted text is stored in the database.
+- **PDF Processing**:
+  - The **Tesseract-based** version (`pdf_search_gui.py`) uses `pytesseract` to perform OCR on extracted images from PDFs.
+  - The **EasyOCR-based** version (`pdf_processor_easyocr.py`) uses `EasyOCR` to perform OCR on extracted images from PDFs.
   
 - **Database Interaction**: The script inserts extracted PDF text, image metadata, and OCR results into the SQLite database. It provides search functionality for both PDF text and OCR-extracted text.
 
@@ -129,7 +153,7 @@ The application stores PDF data in an SQLite database called `pdf_data.db`. The 
 
 1. **Text Extraction**: For each page in the PDF, text is extracted and inserted into the `pages` table in the database.
    
-2. **Image Extraction and OCR**: For each image found in the PDF, metadata is saved in the `images` table. The image is then passed to `pytesseract` to extract text via OCR, and the result is stored in the `ocr_text` table.
+2. **Image Extraction and OCR**: For each image found in the PDF, metadata is saved in the `images` table. The image is then passed to either **Tesseract** or **EasyOCR** to extract text via OCR, and the result is stored in the `ocr_text` table.
 
 3. **Search**: The user can search both the `pages` table (PDF text) and the `ocr_text` table (OCR text from images). The results are combined and displayed in the GUI.
 
