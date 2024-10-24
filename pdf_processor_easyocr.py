@@ -6,6 +6,7 @@ import easyocr
 import sqlite3
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import numpy as np
 
 # Initialize the EasyOCR reader (you can specify the languages supported, 'en' for English)
 reader = easyocr.Reader(['en'])
@@ -58,8 +59,11 @@ def extract_images_and_save(page, page_number, conn, pdf_id):
             # Insert image metadata into the database
             insert_image_metadata(conn, pdf_id, page_number, f"image_page{page_number}_{image_index}", image_ext)
 
+            # Convert PIL Image to NumPy array for EasyOCR
+            image_np = np.array(image)
+
             # Apply EasyOCR to the image to extract text
-            ocr_result = reader.readtext(image)
+            ocr_result = reader.readtext(image_np)
             ocr_text = " ".join([text[1] for text in ocr_result])  # Extract text from the OCR result
 
             if ocr_text.strip():
