@@ -5,6 +5,9 @@ def create_database(db_name="pdf_data.db"):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
 
+    # Enable foreign key constraint enforcement (necessary in SQLite)
+    cursor.execute("PRAGMA foreign_keys = ON")
+
     # Create tables if they don't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS pdf_files (
@@ -20,7 +23,7 @@ def create_database(db_name="pdf_data.db"):
             pdf_id INTEGER,
             page_number INTEGER,
             text TEXT,
-            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE
         )
     ''')
 
@@ -31,24 +34,23 @@ def create_database(db_name="pdf_data.db"):
             page_number INTEGER,
             image_name TEXT,
             image_ext TEXT,
-            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE
         )
     ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS keywords (
+        CREATE TABLE IF NOT EXISTS ocr_text (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pdf_id INTEGER,
             page_number INTEGER,
-            keyword TEXT,
-            context TEXT,
-            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+            ocr_text TEXT,
+            FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE
         )
     ''')
 
     conn.commit()
     conn.close()
-    print("Database and tables created successfully.")
+    print("Database and tables created successfully with foreign key constraints.")
 
 # Run the function to create the database and tables
 if __name__ == "__main__":

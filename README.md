@@ -1,129 +1,171 @@
-# PDFSearchPlus
+Here’s the updated `README.md` based on the latest functionality provided by your Python script. This README covers installation, usage, database schema, and how the application works with both PDF text and OCR-extracted text from images.
 
-**PDFSearchPlus** is a Python-based application designed to help you extract, search, and manage data from PDF files. It allows users to extract text, images, and keywords from PDFs, store the extracted information in an SQLite database, and search the content by keywords and context. Additionally, users can preview PDF pages, navigate directly to where the keywords were found, zoom in/out of the PDF, and navigate between pages with ease.
+### README.md
+
+---
+
+# PDF Search and OCR Application
+
+This Python application processes PDF files by extracting text from the pages and images, applying OCR (Optical Character Recognition) to images, and storing the results in a SQLite database. It provides a graphical user interface (GUI) built with `Tkinter` to search and preview the PDF content, including OCR-extracted text.
 
 ## Features
 
-- **Extract text, images, and keywords** from PDF files.
-- **Mass scanning**: Process multiple PDF files from a folder at once.
-- **Keyword and context search**: Search the extracted content by keywords and view the surrounding context.
-- **PDF preview**: Open and preview the exact page in a PDF where the keyword was found.
-- **Page navigation**: Move forward or backward between pages in the PDF.
-- **Zoom functionality**: Zoom in and out to adjust the view of the PDF page preview.
-- **Database integration**: Store extracted data in an SQLite database for quick access and searching.
-- **Threaded search**: Perform searches without freezing the user interface.
-- **Logging**: Errors are logged for easy debugging and tracing.
-- **GUI-based user interface**: Easy-to-use interface with keyword search and PDF preview capabilities.
+- Extracts and stores text from PDF pages.
+- Extracts images from PDF pages and applies OCR using Tesseract.
+- Stores image metadata and OCR-extracted text into the SQLite database.
+- Provides a user-friendly GUI for searching through the stored data, including PDF text and OCR text.
+- Allows for both single-file and folder-based (batch) PDF processing.
+- Enables preview of PDFs with zoom and navigation features.
 
-## Table of Contents
+## Prerequisites
 
-1. [Features](#features)
-2. [Installation](#installation)
-3. [Usage](#usage)
-   - [Setting up the database](#setting-up-the-database)
-   - [Processing PDFs](#processing-pdfs)
-   - [Searching PDFs](#searching-pdfs)
-4. [Screenshots](#screenshots)
-5. [Contributing](#contributing)
-6. [License](#license)
+Before running the application, you need to install the following dependencies:
 
-## Installation
+- Python 3.x
+- [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/en/latest/)
+- [Pillow (PIL)](https://pillow.readthedocs.io/en/stable/)
+- [pytesseract](https://pypi.org/project/pytesseract/)
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (must be installed separately)
 
-### Prerequisites
+### Installation Instructions
 
-Ensure that you have the following installed on your system:
+1. Install the required Python packages using `pip`:
 
-- Python 3.7+
-- pip (Python package manager)
+   ```bash
+   pip install pymupdf Pillow pytesseract
+   ```
 
-### Required Python Libraries
+2. Install Tesseract OCR:
 
-You can install the required Python libraries using the following command:
+   - On **Ubuntu**:
+     ```bash
+     sudo apt install tesseract-ocr
+     ```
+   - On **MacOS** (using Homebrew):
+     ```bash
+     brew install tesseract
+     ```
+   - On **Windows**:
+     Download and install from [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki).
 
-```bash
-pip install -r requirements.txt
-```
+3. Ensure that `tesseract` is in your system’s PATH.
 
-**`requirements.txt` should include:**
-```
-PyMuPDF
-Pillow
-tkinter
-```
+### Database Schema
 
-Alternatively, install these dependencies manually:
+The application stores PDF data in an SQLite database called `pdf_data.db`. The following tables are used to store the extracted data:
 
-```bash
-pip install PyMuPDF Pillow
-```
+- **pdf_files**: Stores metadata for each processed PDF file.
+  ```sql
+  CREATE TABLE pdf_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_name TEXT,
+      file_path TEXT
+  );
+  ```
 
-### Setting up the Database
+- **pages**: Stores text extracted from each PDF page.
+  ```sql
+  CREATE TABLE pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id INTEGER,
+      page_number INTEGER,
+      text TEXT,
+      FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+  );
+  ```
 
-Run the following script to create the SQLite database and initialize the required tables:
+- **images**: Stores metadata about extracted images from the PDF.
+  ```sql
+  CREATE TABLE images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id INTEGER,
+      page_number INTEGER,
+      image_name TEXT,
+      image_ext TEXT,
+      FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+  );
+  ```
 
-```bash
-python db_setup.py
-```
+- **ocr_text**: Stores the text extracted via OCR from images.
+  ```sql
+  CREATE TABLE ocr_text (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id INTEGER,
+      page_number INTEGER,
+      ocr_text TEXT,
+      FOREIGN KEY(pdf_id) REFERENCES pdf_files(id)
+  );
+  ```
 
-This will create a `pdf_data.db` file and set up the following tables:
-- `pdf_files`
-- `pages`
-- `images`
-- `keywords`
+### Usage
 
-## Usage
+1. **Running the Application**:
 
-### 1. Processing PDFs
+   To start the application, run the `main()` function in the script:
 
-To process PDFs and extract text, images, and keywords, run the `pdf_processor.py` script:
+   ```bash
+   python pdf_search_gui.py
+   ```
 
-```bash
-python pdf_processor.py
-```
+   This will launch a GUI allowing you to process PDF files and search their contents.
 
-You will be prompted to either process a single PDF or perform a mass scan on a folder containing multiple PDFs. Once processed, the extracted content will be stored in the `pdf_data.db` database and saved to organized folders.
+2. **Processing PDF Files**:
 
-### 2. Searching PDFs
+   - The application provides two options:
+     - **Single File**: Select a single PDF file to process.
+     - **Batch Processing**: Select a folder containing multiple PDFs for processing.
+   
+   After processing, the text, images, and OCR data will be stored in the SQLite database.
 
-To search the extracted data by keywords or context, run the `pdf_search_gui.py` script:
+3. **Searching for Text**:
 
-```bash
-python pdf_search_gui.py
-```
+   In the GUI, enter a search term and press "Search". The application will search both PDF page text and OCR-extracted text from images. The results will be displayed in a table, showing the PDF file name, page number, and matching context.
 
-This will open a graphical user interface where you can:
-- Search for keywords or context in the database.
-- View search results, including the PDF file, page number, keyword, and context.
-- Open and preview the corresponding PDF at the exact page where the keyword is found.
-- Navigate between pages of the PDF using "Next" and "Previous" buttons.
-- Zoom in and out of the PDF for better viewing.
+4. **Previewing PDF Pages**:
 
-### New Features
+   From the search results, you can select a PDF and page to preview. The selected PDF page will be displayed in the right-hand pane of the GUI, with zoom and navigation controls available.
 
-- **Page Navigation**: Easily move between pages of the PDF with the "Next" and "Previous" buttons.
-- **Zoom In/Out**: Adjust the preview size with "Zoom In" and "Zoom Out" buttons.
-- **Threaded Search**: The search function now runs in the background, keeping the interface responsive while querying the database.
+### Code Structure
 
-## Screenshots
+- **PDF Processing**: The script uses `PyMuPDF` (fitz) to extract text and images from PDF files. The images are passed through `pytesseract` to perform OCR, and the extracted text is stored in the database.
+  
+- **Database Interaction**: The script inserts extracted PDF text, image metadata, and OCR results into the SQLite database. It provides search functionality for both PDF text and OCR-extracted text.
 
-### Main GUI for PDF Search and Preview
+### How It Works
 
-![PDF Search GUI](path-to-your-image)
+1. **Text Extraction**: For each page in the PDF, text is extracted and inserted into the `pages` table in the database.
+   
+2. **Image Extraction and OCR**: For each image found in the PDF, metadata is saved in the `images` table. The image is then passed to `pytesseract` to extract text via OCR, and the result is stored in the `ocr_text` table.
 
-### PDF Preview
+3. **Search**: The user can search both the `pages` table (PDF text) and the `ocr_text` table (OCR text from images). The results are combined and displayed in the GUI.
 
-![PDF Preview](path-to-your-image)
+4. **Preview**: The selected PDF file is opened and rendered in the GUI's canvas area, allowing the user to view the selected page.
 
-## Contributing
+### Example Usage
 
-Contributions are welcome! If you'd like to contribute to **PDFSearchPlus**, please follow these steps:
+1. **Single PDF File**:
+   - Open the application.
+   - Choose a PDF file to process.
+   - Search for text or OCR data using the search bar.
+   - View the search results and select a page to preview.
 
-1. Fork the repository.
-2. Create a new branch for your feature or bugfix (`git checkout -b feature-name`).
-3. Make your changes and commit them (`git commit -m 'Add feature'`).
-4. Push your branch to GitHub (`git push origin feature-name`).
-5. Open a pull request and provide a detailed description of your changes.
+2. **Batch Processing**:
+   - Select a folder containing multiple PDF files.
+   - The application will process all PDFs and extract text, images, and OCR data.
+   - Perform searches across all processed files.
 
-## License
+### Error Handling and Logging
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+- All errors during processing are logged to `app.log`, and the user is notified of issues via GUI pop-up messages.
+
+### License
+
+This project is open-source and available under the [MIT License](LICENSE).
+
+---
+
+### Future Enhancements
+
+- Add support for exporting search results.
+- Improve image OCR accuracy with advanced preprocessing.
+- Add annotations for highlighted text in preview mode.

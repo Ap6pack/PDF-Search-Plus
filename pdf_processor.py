@@ -1,214 +1,123 @@
 import os
 import io
-import re  # Regular expressions for exact keyword matching
 import fitz  # PyMuPDF
 from PIL import Image
+import pytesseract  # OCR tool
 import sqlite3
 import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox
+from tkinter import filedialog, messagebox
 
-
-# Functions to interact with the database (inserting data)
+# Database interaction functions (unchanged)
 def insert_pdf_file(conn, file_name, file_path):
+    """Insert metadata of the PDF file into the database."""
     cursor = conn.cursor()
     cursor.execute("INSERT INTO pdf_files (file_name, file_path) VALUES (?, ?)", (file_name, file_path))
     conn.commit()
-    return cursor.lastrowid  # Return the ID of the inserted record
-
+    return cursor.lastrowid
 
 def insert_page_text(conn, pdf_id, page_number, text):
+    """Insert text of each PDF page into the database."""
     cursor = conn.cursor()
     cursor.execute("INSERT INTO pages (pdf_id, page_number, text) VALUES (?, ?, ?)", (pdf_id, page_number, text))
     conn.commit()
 
-
 def insert_image_metadata(conn, pdf_id, page_number, image_name, image_ext):
+    """Insert metadata of extracted images into the database."""
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO images (pdf_id, page_number, image_name, image_ext) VALUES (?, ?, ?, ?)", 
+    cursor.execute("INSERT INTO images (pdf_id, page_number, image_name, image_ext) VALUES (?, ?, ?, ?)",
                    (pdf_id, page_number, image_name, image_ext))
     conn.commit()
 
-
-def insert_keyword_result(conn, pdf_id, page_number, keyword, context):
+def insert_image_ocr_text(conn, pdf_id, page_number, ocr_text):
+    """Insert the OCR text extracted from images into the database."""
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO keywords (pdf_id, page_number, keyword, context) VALUES (?, ?, ?, ?)", 
-                   (pdf_id, page_number, keyword, context))
+    cursor.execute("INSERT INTO ocr_text (pdf_id, page_number, ocr_text) VALUES (?, ?, ?)", 
+                   (pdf_id, page_number, ocr_text))
     conn.commit()
 
+# PDF processing functions
+def extract_text_and_save(page, page_number, conn, pdf_id):
+    """Extract text from a PDF page and insert into the database."""
+    text = page.get_text()
+    insert_page_text(conn, pdf_id, page_number, text)
 
-def search_keywords_in_text(text, keywords):
-    """Search for exact keyword matches in the provided text."""
-    results = {}
+def extract_images_and_save(page, page_number, conn, pdf_id):
+    """Extract images from a PDF page, apply OCR, and insert metadata and OCR text into the database."""
+    image_list = page.get_images(full=True)
+    if image_list:
+        for image_index, img in enumerate(image_list, start=1):
+            xref = img[0]
+            base_image = page.parent.extract_image(xref)
+            image_bytes = base_image["image"]
+            image_ext = base_image["ext"]
+            image = Image.open(io.BytesIO(image_bytes))
 
-    # Iterate over each keyword to find exact matches
-    for keyword in keywords:
-        keyword = keyword.lower()
-        # Use regular expression to match whole words, case-insensitive
-        pattern = r'\b' + re.escape(keyword) + r'\b'
-        matches = re.findall(pattern, text, flags=re.IGNORECASE)
+            # Insert image metadata into the database
+            insert_image_metadata(conn, pdf_id, page_number, f"image_page{page_number}_{image_index}", image_ext)
 
-        if matches:
-            # Collect surrounding context (line where the match was found)
-            occurrences = []
-            for line in text.splitlines():
-                if re.search(pattern, line, flags=re.IGNORECASE):
-                    occurrences.append(line.strip())
-            if occurrences:
-                results[keyword] = occurrences
+            # Apply OCR to the image to extract text
+            ocr_text = pytesseract.image_to_string(image)
+            if ocr_text.strip():
+                # Insert OCR text into the database
+                insert_image_ocr_text(conn, pdf_id, page_number, ocr_text)
+                print(f"OCR text extracted from image on page {page_number}: {ocr_text[:100]}...")  # Display first 100 chars
 
-    return results
+def process_pdf(conn, pdf_path):
+    """Process a single PDF file, extracting text and images, and storing them in the database."""
+    try:
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        pdf_id = insert_pdf_file(conn, base_name, pdf_path)
 
-def process_pdf(conn, pdf_path, keyword_list):
-    # Extract the filename without extension and path
-    base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        with fitz.open(pdf_path) as pdf_file:
+            for page_index, page in enumerate(pdf_file):
+                page_number = page_index + 1
+                extract_text_and_save(page, page_number, conn, pdf_id)
+                extract_images_and_save(page, page_number, conn, pdf_id)
 
-    # Insert PDF metadata into the database
-    pdf_id = insert_pdf_file(conn, base_name, pdf_path)
+        print(f"Successfully processed PDF: {pdf_path}")
 
-    # Create output directories for text, images, and keywords
-    output_dir = os.path.join(os.getcwd(), base_name)
-    text_dir = os.path.join(output_dir, "text")
-    images_dir = os.path.join(output_dir, "images")
-    keywords_dir = os.path.join(output_dir, "keywords")
+    except Exception as e:
+        print(f"Error processing PDF {pdf_path}: {e}")
+        messagebox.showerror("Error", f"An error occurred while processing the PDF: {e}")
 
-    os.makedirs(text_dir, exist_ok=True)
-    os.makedirs(images_dir, exist_ok=True)
-    os.makedirs(keywords_dir, exist_ok=True)
+# Main application functions (unchanged)
+def process_selected_file(conn, pdf_path):
+    """Process a single PDF file selected by the user."""
+    if pdf_path:
+        process_pdf(conn, pdf_path)
+    else:
+        print("No file selected. Exiting.")
 
-    # Open the PDF file
-    with fitz.open(pdf_path) as pdf_file:
-        keyword_results = {}
-
-        # Iterate over PDF pages
-        for page_index, page in enumerate(pdf_file):
-            # Extract text
-            text = page.get_text()
-
-            # Insert page text into the database
-            insert_page_text(conn, pdf_id, page_index + 1, text)  # Page number starts from 1
-
-            # Save text of each page to file
-            page_text_filename = os.path.join(text_dir, f"page_{page_index + 1}.txt")
-            with open(page_text_filename, "w", encoding="utf-8") as f:
-                f.write(text)
-
-            # Search for keywords on each page
-            page_results = search_keywords_in_text(text, keyword_list)
-            if page_results:
-                keyword_results[f"Page {page_index + 1}"] = page_results
-
-                # Insert keywords into the database
-                for keyword, occurrences in page_results.items():
-                    for occurrence in occurrences:
-                        insert_keyword_result(conn, pdf_id, page_index + 1, keyword, occurrence)
-
-            # Extract images
-            image_list = page.get_images(full=True)
-            if image_list:
-                for image_index, img in enumerate(image_list, start=1):
-                    xref = img[0]
-                    base_image = pdf_file.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    image_ext = base_image["ext"]
-                    image = Image.open(io.BytesIO(image_bytes))
-
-                    # Define the output path for the image
-                    image_filename = os.path.join(images_dir, f"image_page{page_index + 1}_{image_index}.{image_ext}")
-                    image.save(image_filename)
-
-                    # Insert image metadata into the database
-                    insert_image_metadata(conn, pdf_id, page_index + 1, f"image_page{page_index + 1}_{image_index}", image_ext)
-
-        # Save the keyword search results
-        if keyword_results:
-            keyword_output_file = os.path.join(keywords_dir, f"{base_name}_keyword_results.txt")
-            with open(keyword_output_file, "w", encoding="utf-8") as f:
-                for page, results in keyword_results.items():
-                    f.write(f"\n{page}\n")
-                    f.write("=" * 20 + "\n")
-                    for keyword, occurrences in results.items():
-                        f.write(f"\nKeyword: {keyword}\n")
-                        f.write("-" * 10 + "\n")
-                        for occurrence in occurrences:
-                            f.write(f"{occurrence}\n")
-
-                    # Insert keywords into the database
-                    for keyword, occurrences in results.items():
-                        for occurrence in occurrences:
-                            insert_keyword_result(conn, pdf_id, page_index + 1, keyword, occurrence)
-
-
-def main():
-    # Initialize tkinter root
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
-
-    # Connect to the existing database
-    conn = sqlite3.connect('pdf_data.db')
-
-    # Ask the user if they want to scan a single file or multiple files
-    scan_type = messagebox.askquestion(
-        "Select Scanning Type", "Do you want to scan a folder (mass scanning)?"
-    )
-
-    if scan_type == 'yes':  # Mass scanning
-        folder_path = filedialog.askdirectory(
-            title="Select Folder with PDFs for Mass Scanning"
-        )
-
-        if not folder_path:
-            print("No folder selected. Exiting.")
-            return
-
-        # Ask the user to input keywords
-        keywords = simpledialog.askstring(
-            "Keyword Input",
-            "Enter keywords separated by commas (e.g., security, AI, attack):"
-        )
-        if not keywords:
-            print("No keywords provided. Exiting.")
-            return
-
-        # Split keywords and clean up any extra spaces
-        keyword_list = [kw.strip() for kw in keywords.split(",")]
-
-        # Process each PDF file in the selected folder
+def process_folder(conn, folder_path):
+    """Process all PDF files in a selected folder."""
+    if folder_path:
         for file_name in os.listdir(folder_path):
             if file_name.lower().endswith(".pdf"):
                 pdf_path = os.path.join(folder_path, file_name)
                 print(f"Processing file: {file_name}")
-                process_pdf(conn, pdf_path, keyword_list)
-        print(f"Mass scanning completed. Results are saved in the working directory.")
+                process_pdf(conn, pdf_path)
+        print("Mass scanning completed.")
+    else:
+        print("No folder selected. Exiting.")
 
-    else:  # Single file scanning
-        # Open file dialog to select a single PDF file
-        pdf_path = filedialog.askopenfilename(
-            title="Select PDF File",
-            filetypes=[("PDF Files", "*.pdf")],
-        )
+def main():
+    """Main function to run the tkinter-based file dialog for PDF scanning."""
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
 
-        if not pdf_path:
-            print("No file selected. Exiting.")
-            return
+    conn = sqlite3.connect('pdf_data.db')
 
-        # Ask the user to input keywords
-        keywords = simpledialog.askstring(
-            "Keyword Input",
-            "Enter keywords separated by commas (e.g., security, AI, attack):"
-        )
-        if not keywords:
-            print("No keywords provided. Exiting.")
-            return
-
-        # Split keywords and clean up any extra spaces
-        keyword_list = [kw.strip() for kw in keywords.split(",")]
-
-        # Process the selected single PDF file
-        process_pdf(conn, pdf_path, keyword_list)
+    scan_type = messagebox.askquestion("Select Scanning Type", "Do you want to scan a folder (mass scanning)?")
+    
+    if scan_type == 'yes':
+        folder_path = filedialog.askdirectory(title="Select Folder with PDFs for Mass Scanning")
+        process_folder(conn, folder_path)
+    else:
+        pdf_path = filedialog.askopenfilename(title="Select PDF File", filetypes=[("PDF Files", "*.pdf")])
+        process_selected_file(conn, pdf_path)
 
     conn.close()
     print("Processing completed.")
-
 
 if __name__ == "__main__":
     main()
