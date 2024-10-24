@@ -1,9 +1,3 @@
-Here’s the updated `README.md` based on the latest functionality provided by your Python script. This README covers installation, usage, database schema, and how the application works with both PDF text and OCR-extracted text from images.
-
-### README.md
-
----
-
 # PDF Search and OCR Application
 
 This Python application processes PDF files by extracting text from the pages and images, applying OCR (Optical Character Recognition) to images, and storing the results in a SQLite database. It provides a graphical user interface (GUI) built with `Tkinter` to search and preview the PDF content, including OCR-extracted text.
