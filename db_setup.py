@@ -48,6 +48,24 @@ def create_database(db_name="pdf_data.db"):
         )
     ''')
 
+    cursor.execute('''
+        CREATE VIEW summary AS
+        SELECT 
+            f.file_name || '.pdf' AS file_name,
+            GROUP_CONCAT(
+                COALESCE(p.text, '') || ' ' || COALESCE(o.ocr_text, ''), 
+                ' '
+            ) AS combined_text
+        FROM 
+            pdf_files f
+        LEFT JOIN 
+            pages p ON f.id = p.pdf_id
+        LEFT JOIN 
+            ocr_text o ON f.id = o.pdf_id AND p.page_number = o.page_number
+        GROUP BY 
+            f.file_name
+    ''')
+
     conn.commit()
     conn.close()
     print("Database and tables created successfully with foreign key constraints.")
