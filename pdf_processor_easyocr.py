@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='pdf_processor.log', filemode='a')
+
 
 @dataclass
 class PDFMetadata:
