@@ -4,129 +4,222 @@ import fitz  # PyMuPDF
 from PIL import Image
 import easyocr
 import sqlite3
+from sqlite3 import Connection, Cursor
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+from typing import List, Optional, Tuple
+from pathlib import Path
+from dataclasses import dataclass
+from contextlib import contextmanager
 
-# Initialize the EasyOCR reader (you can specify the languages supported, 'en' for English)
-reader = easyocr.Reader(['en'])
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Database interaction functions (unchanged)
-def insert_pdf_file(conn, file_name, file_path):
-    """Insert metadata of the PDF file into the database."""
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO pdf_files (file_name, file_path) VALUES (?, ?)", (file_name, file_path))
-    conn.commit()
-    return cursor.lastrowid
+@dataclass
+class PDFMetadata:
+    """Store PDF metadata in a structured way"""
+    file_name: str
+    file_path: str
+    id: Optional[int] = None
 
-def insert_page_text(conn, pdf_id, page_number, text):
-    """Insert text of each PDF page into the database."""
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO pages (pdf_id, page_number, text) VALUES (?, ?, ?)", (pdf_id, page_number, text))
-    conn.commit()
-
-def insert_image_metadata(conn, pdf_id, page_number, image_name, image_ext):
-    """Insert metadata of extracted images into the database."""
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO images (pdf_id, page_number, image_name, image_ext) VALUES (?, ?, ?, ?)",
-                   (pdf_id, page_number, image_name, image_ext))
-    conn.commit()
-
-def insert_image_ocr_text(conn, pdf_id, page_number, ocr_text):
-    """Insert the OCR text extracted from images into the database."""
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO ocr_text (pdf_id, page_number, ocr_text) VALUES (?, ?, ?)", 
-                   (pdf_id, page_number, ocr_text))
-    conn.commit()
-
-# PDF processing functions
-def extract_text_and_save(page, page_number, conn, pdf_id):
-    """Extract text from a PDF page and insert into the database."""
-    text = page.get_text()
-    insert_page_text(conn, pdf_id, page_number, text)
-
-def extract_images_and_save(page, page_number, conn, pdf_id):
-    """Extract images from a PDF page, apply OCR, and insert metadata and OCR text into the database."""
-    image_list = page.get_images(full=True)
-    if image_list:
-        for image_index, img in enumerate(image_list, start=1):
-            xref = img[0]
-            base_image = page.parent.extract_image(xref)
-            image_bytes = base_image["image"]
-            image_ext = base_image["ext"]
-            image = Image.open(io.BytesIO(image_bytes))
-
-            # Insert image metadata into the database
-            insert_image_metadata(conn, pdf_id, page_number, f"image_page{page_number}_{image_index}", image_ext)
-
-            # Convert PIL Image to NumPy array for EasyOCR
-            image_np = np.array(image)
-
-            # Apply EasyOCR to the image to extract text
-            ocr_result = reader.readtext(image_np)
-            ocr_text = " ".join([text[1] for text in ocr_result])  # Extract text from the OCR result
-
-            if ocr_text.strip():
-                # Insert OCR text into the database
-                insert_image_ocr_text(conn, pdf_id, page_number, ocr_text)
-                print(f"OCR text extracted from image on page {page_number}: {ocr_text[:100]}...")  # Display first 100 chars
-
-def process_pdf(conn, pdf_path):
-    """Process a single PDF file, extracting text and images, and storing them in the database."""
+@contextmanager
+def get_database_connection():
+    """Context manager for database connections"""
+    conn = sqlite3.connect('pdf_data.db')
     try:
-        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-        pdf_id = insert_pdf_file(conn, base_name, pdf_path)
+        yield conn
+    finally:
+        conn.close()
 
-        with fitz.open(pdf_path) as pdf_file:
-            for page_index, page in enumerate(pdf_file):
-                page_number = page_index + 1
-                extract_text_and_save(page, page_number, conn, pdf_id)
-                extract_images_and_save(page, page_number, conn, pdf_id)
+class PDFProcessor:
+    def __init__(self):
+        self.reader = easyocr.Reader(['en'])
+    
+    def insert_pdf_file(self, conn: Connection, metadata: PDFMetadata) -> int:
+        """Insert metadata of the PDF file into the database."""
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO pdf_files (file_name, file_path) VALUES (?, ?)",
+            (metadata.file_name, metadata.file_path)
+        )
+        conn.commit()
+        return cursor.lastrowid
 
-        print(f"Successfully processed PDF: {pdf_path}")
+    def insert_page_text(self, conn: Connection, pdf_id: int, page_number: int, text: str) -> None:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO pages (pdf_id, page_number, text) VALUES (?, ?, ?)",
+            (pdf_id, page_number, text)
+        )
+        conn.commit()
 
-    except Exception as e:
-        print(f"Error processing PDF {pdf_path}: {e}")
-        messagebox.showerror("Error", f"An error occurred while processing the PDF: {e}")
+    def insert_image_metadata(
+        self, conn: Connection, pdf_id: int, page_number: int,
+        image_name: str, image_ext: str
+    ) -> None:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO images (pdf_id, page_number, image_name, image_ext) VALUES (?, ?, ?, ?)",
+            (pdf_id, page_number, image_name, image_ext)
+        )
+        conn.commit()
 
-# Main application functions (unchanged)
-def process_selected_file(conn, pdf_path):
-    """Process a single PDF file selected by the user."""
-    if pdf_path:
-        process_pdf(conn, pdf_path)
-    else:
-        print("No file selected. Exiting.")
+    def insert_image_ocr_text(
+        self, conn: Connection, pdf_id: int, page_number: int, ocr_text: str
+    ) -> None:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO ocr_text (pdf_id, page_number, ocr_text) VALUES (?, ?, ?)",
+            (pdf_id, page_number, ocr_text)
+        )
+        conn.commit()
 
-def process_folder(conn, folder_path):
-    """Process all PDF files in a selected folder."""
-    if folder_path:
-        for file_name in os.listdir(folder_path):
-            if file_name.lower().endswith(".pdf"):
-                pdf_path = os.path.join(folder_path, file_name)
-                print(f"Processing file: {file_name}")
-                process_pdf(conn, pdf_path)
-        print("Mass scanning completed.")
-    else:
-        print("No folder selected. Exiting.")
+    def extract_text_and_save(
+        self, page: fitz.Page, page_number: int, conn: Connection, pdf_id: int
+    ) -> None:
+        """Extract and save text from a PDF page"""
+        try:
+            text = page.get_text()
+            self.insert_page_text(conn, pdf_id, page_number, text)
+        except Exception as e:
+            logger.error(f"Error extracting text from page {page_number}: {e}")
+            raise
+
+    def process_image(
+        self, image_bytes: bytes, image_ext: str
+    ) -> Tuple[np.ndarray, Optional[str]]:
+        """Process a single image and extract OCR text"""
+        try:
+            image = Image.open(io.BytesIO(image_bytes))
+            image_np = np.array(image)
+            ocr_result = self.reader.readtext(image_np)
+            ocr_text = " ".join([text[1] for text in ocr_result])
+            return image_np, ocr_text if ocr_text.strip() else None
+        except Exception as e:
+            logger.error(f"Error processing image: {e}")
+            return None, None
+
+    def extract_images_and_save(
+        self, page: fitz.Page, page_number: int, conn: Connection, pdf_id: int
+    ) -> None:
+        """Extract and save images from a PDF page"""
+        try:
+            image_list = page.get_images(full=True)
+            for image_index, img in enumerate(image_list, start=1):
+                xref = img[0]
+                base_image = page.parent.extract_image(xref)
+                
+                image_name = f"image_page{page_number}_{image_index}"
+                self.insert_image_metadata(
+                    conn, pdf_id, page_number, image_name, base_image["ext"]
+                )
+
+                _, ocr_text = self.process_image(base_image["image"], base_image["ext"])
+                if ocr_text:
+                    self.insert_image_ocr_text(conn, pdf_id, page_number, ocr_text)
+                    logger.info(f"OCR text extracted from image {image_name}")
+
+        except Exception as e:
+            logger.error(f"Error extracting images from page {page_number}: {e}")
+            raise
+
+    def is_pdf_processed(self, conn: Connection, metadata: PDFMetadata) -> bool:
+        """Check if the PDF file has already been processed"""
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM pdf_files WHERE file_name = ? AND file_path = ?",
+            (metadata.file_name, metadata.file_path)
+        )
+        return cursor.fetchone() is not None
+
+    def process_pdf(self, metadata: PDFMetadata) -> None:
+        """Process a single PDF file"""
+        try:
+            with get_database_connection() as conn:
+                if self.is_pdf_processed(conn, metadata):
+                    logger.info(f"Skipping already processed file: {metadata.file_name}")
+                    return
+
+                pdf_id = self.insert_pdf_file(conn, metadata)
+                with fitz.open(metadata.file_path) as pdf_file:
+                    for page_index, page in enumerate(pdf_file):
+                        page_number = page_index + 1
+                        self.extract_text_and_save(page, page_number, conn, pdf_id)
+                        self.extract_images_and_save(page, page_number, conn, pdf_id)
+
+                logger.info(f"Successfully processed PDF: {metadata.file_path}")
+
+        except Exception as e:
+            logger.error(f"Error processing PDF {metadata.file_path}: {e}")
+            messagebox.showerror("Error", f"An error occurred while processing the PDF: {e}")
+            raise
+
+class PDFProcessorUI:
+    def __init__(self):
+        self.processor = PDFProcessor()
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+    def process_folder(self, folder_path: Path) -> None:
+        """Process all PDF files in a folder"""
+        if not folder_path.exists():
+            logger.error(f"Folder not found: {folder_path}")
+            return
+
+        pdf_files = list(folder_path.glob("*.pdf"))
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(
+                    self.processor.process_pdf,
+                    PDFMetadata(f.name, str(f))
+                ): f for f in pdf_files
+            }
+
+            for future in as_completed(futures):
+                pdf_path = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Failed to process {pdf_path}: {e}")
+
+    def run(self):
+        """Run the PDF processor UI"""
+        scan_type = messagebox.askquestion(
+            "Select Scanning Type",
+            "Do you want to scan a folder (mass scanning)?"
+        )
+
+        try:
+            if scan_type == 'yes':
+                folder_path = filedialog.askdirectory(
+                    title="Select Folder with PDFs for Mass Scanning"
+                )
+                if folder_path:
+                    self.process_folder(Path(folder_path))
+            else:
+                pdf_path = filedialog.askopenfilename(
+                    title="Select PDF File",
+                    filetypes=[("PDF Files", "*.pdf")]
+                )
+                if pdf_path:
+                    metadata = PDFMetadata(
+                        Path(pdf_path).name,
+                        pdf_path
+                    )
+                    self.processor.process_pdf(metadata)
+        
+            logger.info("Processing completed successfully")
+        except Exception as e:
+            logger.error(f"Processing failed: {e}")
+            messagebox.showerror("Error", f"Processing failed: {e}")
 
 def main():
-    """Main function to run the tkinter-based file dialog for PDF scanning."""
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
-
-    conn = sqlite3.connect('pdf_data.db')
-
-    scan_type = messagebox.askquestion("Select Scanning Type", "Do you want to scan a folder (mass scanning)?")
-    
-    if scan_type == 'yes':
-        folder_path = filedialog.askdirectory(title="Select Folder with PDFs for Mass Scanning")
-        process_folder(conn, folder_path)
-    else:
-        pdf_path = filedialog.askopenfilename(title="Select PDF File", filetypes=[("PDF Files", "*.pdf")])
-        process_selected_file(conn, pdf_path)
-
-    conn.close()
-    print("Processing completed.")
+    processor_ui = PDFProcessorUI()
+    processor_ui.run()
 
 if __name__ == "__main__":
     main()
