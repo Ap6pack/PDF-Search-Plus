@@ -17,7 +17,7 @@ PDF Search Plus is a Python application that processes PDF files by extracting t
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/username/pdf-search-plus.git
+   git clone https://github.com/Ap6pack/pdf-search-plus.git
    cd pdf-search-plus
    ```
 
