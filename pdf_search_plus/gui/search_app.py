@@ -9,6 +9,7 @@ import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import threading
 import logging
+import time
 from typing import Optional, List, Tuple, Dict, Any
 from pathlib import Path
 
@@ -16,6 +17,12 @@ from pdf_search_plus.utils.db import PDFDatabase
 from pdf_search_plus.utils.security import (
     sanitize_text, sanitize_search_term, validate_file_path,
     validate_pdf_file
+)
+from pdf_search_plus.utils.cache import (
+    pdf_cache, image_cache, search_cache
+)
+from pdf_search_plus.utils.memory import (
+    log_memory_usage, memory_usage_tracking, force_garbage_collection
 )
 
 
@@ -34,13 +41,20 @@ class PDFSearchApp:
         """
         self.root = root
         self.root.title("PDF Search and Preview")
-        self.root.geometry("800x600")  # Default window size
+        self.root.geometry("1000x700")  # Larger default window size
 
         # PDF state
         self.current_pdf = None
         self.page_number = 1
         self.total_pages = 0
         self.zoom_factor = 1.0
+
+        # Search state
+        self.current_search_term = ""
+        self.current_page = 0
+        self.results_per_page = 20
+        self.total_results = 0
+        self.use_fts = True  # Use full-text search by default
 
         # Database
         self.db = db or PDFDatabase()
@@ -50,6 +64,9 @@ class PDFSearchApp:
 
         # Initialize UI components
         self.create_widgets()
+        
+        # Start memory monitoring
+        log_memory_usage("Application startup")
 
     def create_widgets(self):
         """Create and arrange the UI widgets."""
@@ -57,11 +74,46 @@ class PDFSearchApp:
         frame_search = tk.Frame(self.root)
         frame_search.grid(row=0, column=0, columnspan=8, padx=10, pady=10, sticky='ew')
 
-        tk.Label(frame_search, text="Search Text").grid(row=0, column=2, padx=10, pady=10)
+        tk.Label(frame_search, text="Search Text").grid(row=0, column=0, padx=10, pady=10)
         self.context_entry = tk.Entry(frame_search, width=30)
-        self.context_entry.grid(row=0, column=3, padx=10, pady=10)
+        self.context_entry.grid(row=0, column=1, padx=10, pady=10)
+        self.context_entry.bind("<Return>", lambda event: self.search_keywords())
 
-        tk.Button(frame_search, text="Search", command=self.search_keywords).grid(row=0, column=4, padx=10, pady=10)
+        # Search options
+        self.use_fts_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            frame_search, 
+            text="Use Full-Text Search", 
+            variable=self.use_fts_var
+        ).grid(row=0, column=2, padx=10, pady=10)
+
+        tk.Button(
+            frame_search, 
+            text="Search", 
+            command=self.search_keywords
+        ).grid(row=0, column=3, padx=10, pady=10)
+        
+        # Pagination controls
+        self.pagination_frame = tk.Frame(frame_search)
+        self.pagination_frame.grid(row=0, column=4, padx=10, pady=10)
+        
+        tk.Button(
+            self.pagination_frame, 
+            text="Previous", 
+            command=self.prev_results_page
+        ).grid(row=0, column=0, padx=5)
+        
+        self.page_label = tk.Label(self.pagination_frame, text="Page 1 of 1")
+        self.page_label.grid(row=0, column=1, padx=5)
+        
+        tk.Button(
+            self.pagination_frame, 
+            text="Next", 
+            command=self.next_results_page
+        ).grid(row=0, column=2, padx=5)
+        
+        # Initially hide pagination controls
+        self.pagination_frame.grid_remove()
 
         # Treeview for displaying search results
         self.tree = ttk.Treeview(self.root, columns=("PDF ID", "File Name", "Page Number", "Context", "Source"), show="headings")
@@ -237,6 +289,67 @@ class PDFSearchApp:
             self.show_pdf_page(self.page_number)
             self.status_var.set(f"Zoom: {int(self.zoom_factor * 100)}%")
 
+    def next_results_page(self) -> None:
+        """Go to the next page of search results."""
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.load_search_results()
+            
+    def prev_results_page(self) -> None:
+        """Go to the previous page of search results."""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.load_search_results()
+            
+    def update_pagination_controls(self) -> None:
+        """Update the pagination controls based on current search state."""
+        if self.total_results > 0:
+            self.total_pages = (self.total_results + self.results_per_page - 1) // self.results_per_page
+            self.page_label.config(text=f"Page {self.current_page + 1} of {self.total_pages}")
+            self.pagination_frame.grid()  # Show pagination controls
+        else:
+            self.pagination_frame.grid_remove()  # Hide pagination controls
+            
+    def load_search_results(self) -> None:
+        """Load the current page of search results."""
+        if not self.current_search_term:
+            return
+            
+        # Calculate offset for pagination
+        offset = self.current_page * self.results_per_page
+        
+        # Check if we have cached results
+        cache_key = f"{self.current_search_term}_{self.current_page}_{self.use_fts}"
+        cached_results = search_cache.get(cache_key)
+        
+        if cached_results:
+            self.logger.info(f"Using cached search results for '{self.current_search_term}' page {self.current_page + 1}")
+            self.update_treeview(cached_results)
+            return
+            
+        # Perform the search
+        try:
+            with memory_usage_tracking(f"Search for '{self.current_search_term}'"):
+                results = self.db.search_text(
+                    self.current_search_term,
+                    use_fts=self.use_fts,
+                    limit=self.results_per_page,
+                    offset=offset
+                )
+                
+                # Cache the results
+                search_cache.put(cache_key, results)
+                
+                # Update the UI
+                self.update_treeview(results)
+                self.status_var.set(
+                    f"Showing results {offset + 1}-{offset + len(results)} of {self.total_results} "
+                    f"for: {self.current_search_term}"
+                )
+        except Exception as e:
+            self.logger.error(f"Error loading search results: {e}")
+            messagebox.showerror("Error", "An error occurred while loading search results.")
+            
     def search_keywords(self) -> None:
         """Search the database for context in both PDF text and OCR-extracted text."""
         # Get the search term from the entry field
@@ -253,14 +366,38 @@ class PDFSearchApp:
             messagebox.showwarning("Invalid Search", "The search term contains invalid characters.")
             return
             
+        # Update search state
+        self.current_search_term = search_term
+        self.current_page = 0
+        self.use_fts = self.use_fts_var.get()
+        
+        # Update status
         self.status_var.set(f"Searching for: {search_term}...")
+        
+        # Check if we have cached count
+        count_cache_key = f"count_{search_term}_{self.use_fts}"
+        cached_count = search_cache.get(count_cache_key)
         
         def search_db():
             try:
-                # Use the sanitized search term for the database query
-                rows = self.db.search_text(search_term)
-                self.root.after(0, self.update_treeview, rows)  # Safely update Treeview
-                self.root.after(0, lambda: self.status_var.set(f"Found {len(rows)} results for: {search_term}"))
+                # Get the total count of results for pagination
+                if cached_count is not None:
+                    self.total_results = cached_count
+                    self.logger.info(f"Using cached count for '{search_term}': {self.total_results}")
+                else:
+                    with memory_usage_tracking(f"Count results for '{search_term}'"):
+                        self.total_results = self.db.get_search_count(search_term, use_fts=self.use_fts)
+                        search_cache.put(count_cache_key, self.total_results)
+                
+                # Update pagination controls
+                self.root.after(0, self.update_pagination_controls)
+                
+                # Load the first page of results
+                self.root.after(0, self.load_search_results)
+                
+                # Force garbage collection after search
+                force_garbage_collection()
+                
             except Exception as e:
                 self.logger.error(f"Database error: {e}")
                 # Don't expose detailed error messages to the user
@@ -315,48 +452,74 @@ class PDFSearchApp:
             # Clear the canvas
             self.canvas.delete("all")
             
+            # Check if we have a cached page image
+            cache_key = f"{self.current_pdf}_{page_number}_{self.zoom_factor}"
+            cached_image = pdf_cache.get(cache_key)
+            
+            if cached_image:
+                self.logger.info(f"Using cached page image for {os.path.basename(self.current_pdf)} page {page_number}")
+                img_tk = cached_image
+                
+                # Configure canvas scrollregion
+                self.canvas.config(scrollregion=(0, 0, img_tk.width(), img_tk.height()))
+                
+                # Display the image in the canvas
+                self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
+                self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
+                
+                # Update status bar
+                self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {self.total_pages}")
+                return
+            
             # Open the PDF file
-            doc = fitz.open(self.current_pdf)
-            
-            # Validate page number
-            if page_number < 1:
-                page_number = 1
-                self.page_number = 1
-                self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
-            elif page_number > len(doc):
-                page_number = len(doc)
-                self.page_number = len(doc)
-                self.logger.warning(f"Invalid page number {page_number}, defaulting to last page {len(doc)}")
+            with memory_usage_tracking(f"Rendering PDF page {page_number}"):
+                doc = fitz.open(self.current_pdf)
                 
-            page_index = page_number - 1  # Page number starts from 1
-            page = doc.load_page(page_index)
-            
-            # Validate zoom factor
-            if self.zoom_factor < 0.5:
-                self.zoom_factor = 0.5
-                self.logger.warning("Zoom factor too small, setting to minimum (0.5)")
-            elif self.zoom_factor > 3.0:
-                self.zoom_factor = 3.0
-                self.logger.warning("Zoom factor too large, setting to maximum (3.0)")
+                # Validate page number
+                if page_number < 1:
+                    page_number = 1
+                    self.page_number = 1
+                    self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
+                elif page_number > len(doc):
+                    page_number = len(doc)
+                    self.page_number = len(doc)
+                    self.logger.warning(f"Invalid page number {page_number}, defaulting to last page {len(doc)}")
+                    
+                page_index = page_number - 1  # Page number starts from 1
+                page = doc.load_page(page_index)
                 
-            # Render the page
-            pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
+                # Validate zoom factor
+                if self.zoom_factor < 0.5:
+                    self.zoom_factor = 0.5
+                    self.logger.warning("Zoom factor too small, setting to minimum (0.5)")
+                elif self.zoom_factor > 3.0:
+                    self.zoom_factor = 3.0
+                    self.logger.warning("Zoom factor too large, setting to maximum (3.0)")
+                    
+                # Render the page
+                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
 
-            # Convert to a PIL Image
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                # Convert to a PIL Image
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-            # Convert the image to ImageTk format for tkinter
-            img_tk = ImageTk.PhotoImage(img)
+                # Convert the image to ImageTk format for tkinter
+                img_tk = ImageTk.PhotoImage(img)
 
-            # Configure canvas scrollregion
-            self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
-            
-            # Display the image in the canvas
-            self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
-            self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
-            
-            # Update status bar
-            self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {len(doc)}")
+                # Cache the rendered page
+                pdf_cache.put(cache_key, img_tk)
+
+                # Configure canvas scrollregion
+                self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
+                
+                # Display the image in the canvas
+                self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
+                self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
+                
+                # Update status bar
+                self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {len(doc)}")
+                
+                # Force garbage collection after rendering
+                force_garbage_collection()
         except Exception as e:
             self.logger.error(f"Error displaying PDF page: {e}")
             # Don't expose detailed error messages to the user

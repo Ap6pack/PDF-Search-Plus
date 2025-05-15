@@ -10,6 +10,11 @@ PDF Search Plus is a Python application that processes PDF files by extracting t
 - Provides a user-friendly GUI for searching through the stored data
 - Allows for both single-file and folder-based (batch) PDF processing
 - Enables preview of PDFs with zoom and navigation features
+- **Security features** including input validation, sanitization, and SQL injection protection
+- **Caching system** for PDF pages, search results, and images to improve performance
+- **Memory management** for efficiently handling large PDFs
+- **Pagination** for search results to handle large document collections
+- **Full-text search** capabilities using SQLite FTS5 for fast and efficient searching
 
 ## Installation
 
@@ -25,12 +30,6 @@ PDF Search Plus is a Python application that processes PDF files by extracting t
    ```bash
    pip install -e .
    ```
-
-### Option 2: Install from PyPI
-
-```bash
-pip install pdf-search-plus
-```
 
 ### OCR Engine Requirements
 
@@ -55,6 +54,20 @@ Ensure that `tesseract` is in your system's PATH.
 
 EasyOCR is included in the package dependencies and doesn't require separate installation.
 
+## Dependencies
+
+The application requires the following Python packages:
+
+- `PyMuPDF>=1.18.0` - For PDF processing
+- `Pillow>=8.0.0` - For image processing
+- `pytesseract>=0.3.8` - For Tesseract OCR integration
+- `easyocr>=1.4.1` - For EasyOCR integration
+- `numpy>=1.20.0` - For numerical operations
+- `threaded>=4.1.0` - For multi-threading support
+- `psutil>=5.8.0` - For memory usage monitoring
+- `cachetools>=4.2.0` - For caching capabilities
+- `tqdm>=4.60.0` - For progress tracking
+
 ## Usage
 
 ### Running the Application
@@ -63,18 +76,10 @@ EasyOCR is included in the package dependencies and doesn't require separate ins
 
 1. Run with Tesseract OCR (default):
    ```bash
-   pdf-search-plus
-   ```
-   or
-   ```bash
    python -m pdf_search_plus.main
    ```
 
 2. Run with EasyOCR:
-   ```bash
-   pdf-search-plus --easyocr
-   ```
-   or
    ```bash
    python -m pdf_search_plus.main --easyocr
    ```
@@ -102,8 +107,10 @@ EasyOCR is included in the package dependencies and doesn't require separate ins
 2. **Searching for Text**:
    - Click "Search PDFs" in the main window
    - Enter a search term in the context field
+   - Toggle "Use Full-Text Search" option for faster searches on large collections
    - Click "Search"
    - View the results showing PDF file name, page number, and matching context
+   - Use pagination controls to navigate through large result sets
 
 3. **Previewing PDF Pages**:
    - Select a search result
@@ -130,17 +137,73 @@ pdf_search_plus/
 │   └── search_app.py
 └── utils/
     ├── __init__.py
-    └── db.py
+    ├── db.py
+    ├── cache.py
+    ├── memory.py
+    └── security.py
 ```
 
 ## Database Schema
 
-The application stores PDF data in an SQLite database called `pdf_data.db` with the following tables:
+The application stores PDF data in an SQLite database called `pdf_data.db` with the following structure:
+
+### Tables
 
 - **pdf_files**: Stores metadata for each processed PDF file
+  - `id`: Primary key
+  - `file_name`: Name of the PDF file
+  - `file_path`: Path to the PDF file
+  - `created_at`: Timestamp when the record was created
+  - `last_accessed`: Timestamp when the record was last accessed
+
 - **pages**: Stores text extracted from each PDF page
+  - `id`: Primary key
+  - `pdf_id`: Foreign key to pdf_files
+  - `page_number`: Page number
+  - `text`: Extracted text
+
 - **images**: Stores metadata about extracted images from the PDF
+  - `id`: Primary key
+  - `pdf_id`: Foreign key to pdf_files
+  - `page_number`: Page number
+  - `image_name`: Name of the image
+  - `image_ext`: Image extension
+
 - **ocr_text**: Stores the text extracted via OCR from images
+  - `id`: Primary key
+  - `pdf_id`: Foreign key to pdf_files
+  - `page_number`: Page number
+  - `ocr_text`: Text extracted via OCR
+
+### Full-Text Search
+
+The database includes virtual tables for full-text search:
+
+- **fts_content**: FTS5 virtual table for searching PDF text
+- **fts_ocr**: FTS5 virtual table for searching OCR text
+
+### Indexes
+
+The database includes indexes for better performance:
+
+- Indexes on `pdf_id` columns for faster joins
+- Indexes on text columns for faster searching
+- Indexes on file name and path for faster lookups
+
+## Performance Optimizations
+
+- **Caching**: The application caches PDF pages, search results, and images to improve performance
+- **Memory Management**: Large PDFs are processed in a streaming fashion to reduce memory usage
+- **Batch Processing**: Images are processed in batches to limit memory consumption
+- **Full-Text Search**: SQLite FTS5 is used for fast and efficient text searching
+- **Pagination**: Search results are paginated to handle large result sets efficiently
+
+## Security Features
+
+- **Input Validation**: All user inputs are validated before processing
+- **Path Validation**: File paths are validated to prevent path traversal attacks
+- **Sanitization**: Text is sanitized to prevent XSS and other injection attacks
+- **SQL Injection Protection**: Parameterized queries are used to prevent SQL injection
 
 ## License
 
@@ -152,4 +215,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Improve image OCR accuracy with advanced preprocessing
 - Add annotations for highlighted text in preview mode
 - Support for more languages in OCR
-- Advanced search options (regex, date filters, etc.)
+- Add document categorization and tagging
+- Implement document similarity search
+- Add support for PDF form field extraction

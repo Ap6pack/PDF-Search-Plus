@@ -72,7 +72,9 @@ class PDFDatabase:
                 CREATE TABLE IF NOT EXISTS pdf_files (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     file_name TEXT NOT NULL,
-                    file_path TEXT NOT NULL
+                    file_path TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
 
@@ -107,6 +109,31 @@ class PDFDatabase:
                 )
             ''')
 
+            # Create a virtual table for full-text search
+            cursor.execute('''
+                CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
+                    pdf_id, page_number, content, source,
+                    content=pages, content_rowid=id
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE VIRTUAL TABLE IF NOT EXISTS fts_ocr USING fts5(
+                    pdf_id, page_number, content, source,
+                    content=ocr_text, content_rowid=id
+                )
+            ''')
+
+            # Create indexes for better performance
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_pdf_id ON pages(pdf_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_text ON pages(text)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ocr_text_pdf_id ON ocr_text(pdf_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ocr_text_ocr_text ON ocr_text(ocr_text)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_pdf_id ON images(pdf_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pdf_files_file_name ON pdf_files(file_name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pdf_files_file_path ON pdf_files(file_path)')
+
+            # Create a view for combined text
             cursor.execute('''
                 CREATE VIEW IF NOT EXISTS summary AS
                 SELECT 
@@ -125,8 +152,58 @@ class PDFDatabase:
                     f.file_name
             ''')
 
+            # Create triggers to update FTS tables
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
+                    INSERT INTO fts_content(pdf_id, page_number, content, source)
+                    VALUES (new.pdf_id, new.page_number, new.text, 'PDF Text');
+                END
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages BEGIN
+                    DELETE FROM fts_content WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
+                END
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
+                    DELETE FROM fts_content WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
+                    INSERT INTO fts_content(pdf_id, page_number, content, source)
+                    VALUES (new.pdf_id, new.page_number, new.text, 'PDF Text');
+                END
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS ocr_text_ai AFTER INSERT ON ocr_text BEGIN
+                    INSERT INTO fts_ocr(pdf_id, page_number, content, source)
+                    VALUES (new.pdf_id, new.page_number, new.ocr_text, 'OCR Text');
+                END
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS ocr_text_ad AFTER DELETE ON ocr_text BEGIN
+                    DELETE FROM fts_ocr WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
+                END
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS ocr_text_au AFTER UPDATE ON ocr_text BEGIN
+                    DELETE FROM fts_ocr WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
+                    INSERT INTO fts_ocr(pdf_id, page_number, content, source)
+                    VALUES (new.pdf_id, new.page_number, new.ocr_text, 'OCR Text');
+                END
+            ''')
+
+            # Create a trigger to update last_accessed timestamp
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS pdf_files_au AFTER UPDATE ON pdf_files BEGIN
+                    UPDATE pdf_files SET last_accessed = CURRENT_TIMESTAMP WHERE id = new.id;
+                END
+            ''')
+
             conn.commit()
-            print("Database and tables created successfully with foreign key constraints.")
+            print("Database and tables created successfully with indexes and FTS support.")
     
     def execute_query(self, query: str, params: tuple = ()) -> Optional[List[Tuple]]:
         """
@@ -254,38 +331,101 @@ class PDFDatabase:
             result = cursor.fetchone()
             return result[0] if result else None
     
-    def search_text(self, search_term: str) -> List[Tuple]:
+    def search_text(self, search_term: str, use_fts: bool = True, limit: int = 100, offset: int = 0) -> List[Tuple]:
         """
         Search for text in both PDF text and OCR text.
         
         Args:
             search_term: Text to search for
+            use_fts: Whether to use full-text search (faster but less flexible)
+            limit: Maximum number of results to return
+            offset: Number of results to skip (for pagination)
             
         Returns:
             List of matching results
         """
         # Sanitize the search term to prevent SQL injection
-        sanitized_term = sanitize_search_term(search_term).lower()
+        sanitized_term = sanitize_search_term(search_term)
         
         if not sanitized_term:
             return []
-            
-        # Use parameterized queries to prevent SQL injection
-        query = """
-        SELECT pdf_files.id, pdf_files.file_name, pages.page_number, pages.text, 'PDF Text' as source
-        FROM pages 
-        JOIN pdf_files ON pages.pdf_id = pdf_files.id 
-        WHERE LOWER(pages.text) LIKE ?
-        UNION
-        SELECT pdf_files.id, pdf_files.file_name, ocr_text.page_number, ocr_text.ocr_text, 'OCR Text' as source
-        FROM ocr_text 
-        JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
-        WHERE LOWER(ocr_text.ocr_text) LIKE ?
-        """
-        params = [f'%{sanitized_term}%', f'%{sanitized_term}%']
         
         try:
+            # Check if we should use the FTS tables (faster for large datasets)
+            if use_fts:
+                # Use FTS5 for full-text search
+                query = """
+                SELECT 
+                    pdf_files.id, 
+                    pdf_files.file_name, 
+                    fts.page_number, 
+                    pages.text, 
+                    fts.source
+                FROM fts_content AS fts
+                JOIN pdf_files ON fts.pdf_id = pdf_files.id
+                JOIN pages ON pages.pdf_id = fts.pdf_id AND pages.page_number = fts.page_number
+                WHERE fts.content MATCH ?
+                
+                UNION
+                
+                SELECT 
+                    pdf_files.id, 
+                    pdf_files.file_name, 
+                    fts.page_number, 
+                    ocr_text.ocr_text, 
+                    fts.source
+                FROM fts_ocr AS fts
+                JOIN pdf_files ON fts.pdf_id = pdf_files.id
+                JOIN ocr_text ON ocr_text.pdf_id = fts.pdf_id AND ocr_text.page_number = fts.page_number
+                WHERE fts.content MATCH ?
+                
+                ORDER BY pdf_files.last_accessed DESC
+                LIMIT ? OFFSET ?
+                """
+                # Format the search term for FTS5
+                fts_term = f"{sanitized_term}*"  # Add wildcard for prefix matching
+                params = (fts_term, fts_term, limit, offset)
+            else:
+                # Use LIKE for more flexible but slower search
+                query = """
+                SELECT 
+                    pdf_files.id, 
+                    pdf_files.file_name, 
+                    pages.page_number, 
+                    pages.text, 
+                    'PDF Text' as source
+                FROM pages 
+                JOIN pdf_files ON pages.pdf_id = pdf_files.id 
+                WHERE pages.text LIKE ?
+                
+                UNION
+                
+                SELECT 
+                    pdf_files.id, 
+                    pdf_files.file_name, 
+                    ocr_text.page_number, 
+                    ocr_text.ocr_text, 
+                    'OCR Text' as source
+                FROM ocr_text 
+                JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
+                WHERE ocr_text.ocr_text LIKE ?
+                
+                ORDER BY pdf_files.last_accessed DESC
+                LIMIT ? OFFSET ?
+                """
+                params = (f'%{sanitized_term}%', f'%{sanitized_term}%', limit, offset)
+            
+            # Execute the query
             results = self.execute_query(query, params) or []
+            
+            # Update last_accessed timestamp for the PDFs that were found
+            if results:
+                pdf_ids = set(row[0] for row in results)
+                for pdf_id in pdf_ids:
+                    self.execute_query(
+                        "UPDATE pdf_files SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?",
+                        (pdf_id,)
+                    )
             
             # Sanitize the results to prevent XSS
             sanitized_results = []
@@ -304,6 +444,68 @@ class PDFDatabase:
             # Log the error but don't expose details to the caller
             print(f"Database error: {e}")
             return []
+    
+    def get_search_count(self, search_term: str, use_fts: bool = True) -> int:
+        """
+        Get the total count of search results for pagination.
+        
+        Args:
+            search_term: Text to search for
+            use_fts: Whether to use full-text search
+            
+        Returns:
+            Total number of matching results
+        """
+        # Sanitize the search term to prevent SQL injection
+        sanitized_term = sanitize_search_term(search_term)
+        
+        if not sanitized_term:
+            return 0
+        
+        try:
+            # Check if we should use the FTS tables
+            if use_fts:
+                # Use FTS5 for full-text search
+                query = """
+                SELECT COUNT(*) FROM (
+                    SELECT 1
+                    FROM fts_content
+                    WHERE content MATCH ?
+                    
+                    UNION
+                    
+                    SELECT 1
+                    FROM fts_ocr
+                    WHERE content MATCH ?
+                )
+                """
+                # Format the search term for FTS5
+                fts_term = f"{sanitized_term}*"  # Add wildcard for prefix matching
+                params = (fts_term, fts_term)
+            else:
+                # Use LIKE for more flexible but slower search
+                query = """
+                SELECT COUNT(*) FROM (
+                    SELECT 1
+                    FROM pages
+                    WHERE text LIKE ?
+                    
+                    UNION
+                    
+                    SELECT 1
+                    FROM ocr_text
+                    WHERE ocr_text LIKE ?
+                )
+                """
+                params = (f'%{sanitized_term}%', f'%{sanitized_term}%')
+            
+            # Execute the query
+            result = self.execute_query(query, params)
+            return result[0][0] if result else 0
+        except sqlite3.Error as e:
+            # Log the error but don't expose details to the caller
+            print(f"Database error: {e}")
+            return 0
 
 
 # For backward compatibility
