@@ -13,6 +13,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pdf_search_plus.core.ocr.base import BaseOCRProcessor
 from pdf_search_plus.utils.db import PDFDatabase, PDFMetadata
+from pdf_search_plus.utils.security import (
+    sanitize_text, validate_file_path, validate_folder_path,
+    validate_pdf_file, sanitize_filename
+)
 
 
 class PDFProcessor:
@@ -113,7 +117,22 @@ class PDFProcessor:
         
         Args:
             metadata: PDF metadata
+            
+        Raises:
+            ValueError: If the file path is invalid or the file is not a valid PDF
         """
+        # Validate the file path
+        if not validate_file_path(metadata.file_path):
+            error_msg = f"Invalid file path: {metadata.file_path}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        # Validate that the file is a valid PDF
+        if not validate_pdf_file(metadata.file_path):
+            error_msg = f"Not a valid PDF file: {metadata.file_path}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+            
         try:
             # Check if already processed
             if self.db.is_pdf_processed(metadata):
@@ -127,7 +146,27 @@ class PDFProcessor:
             with fitz.open(metadata.file_path) as pdf_file:
                 for page_index, page in enumerate(pdf_file):
                     page_number = page_index + 1
-                    self.process_page(metadata.file_path, page, page_number, pdf_id)
+                    
+                    # Extract text and sanitize it
+                    text = sanitize_text(self.extract_text_from_page(page))
+                    self.db.insert_page_text(pdf_id, page_number, text)
+                    
+                    # Extract and process images
+                    images = self.extract_images_from_page(page)
+                    for img in images:
+                        image_name = sanitize_filename(f"image_page{page_number}_{img['index']}")
+                        
+                        # Save image metadata
+                        self.db.insert_image_metadata(
+                            pdf_id, page_number, image_name, img['ext']
+                        )
+                        
+                        # Apply OCR, sanitize the text, and save it
+                        ocr_text = self.ocr_processor.process_image_bytes(img['image_bytes'])
+                        if ocr_text:
+                            sanitized_ocr_text = sanitize_text(ocr_text)
+                            self.db.insert_image_ocr_text(pdf_id, page_number, sanitized_ocr_text)
+                            self.logger.info(f"OCR text extracted from image {image_name} in {metadata.file_path}")
             
             self.logger.info(f"Successfully processed PDF: {metadata.file_path}")
         
@@ -142,14 +181,29 @@ class PDFProcessor:
         Args:
             folder_path: Path to the folder
             max_workers: Maximum number of worker threads
+            
+        Raises:
+            ValueError: If the folder path is invalid
         """
-        path = Path(folder_path)
-        if not path.exists():
-            self.logger.error(f"Folder not found: {folder_path}")
-            return
+        # Validate the folder path
+        if not validate_folder_path(folder_path):
+            error_msg = f"Invalid folder path: {folder_path}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
         
+        path = Path(folder_path)
         pdf_files = list(path.glob("*.pdf"))
         self.logger.info(f"Found {len(pdf_files)} PDF files in {folder_path}")
+        
+        # Validate each PDF file before processing
+        valid_pdf_files = []
+        for pdf_file in pdf_files:
+            if validate_pdf_file(pdf_file):
+                valid_pdf_files.append(pdf_file)
+            else:
+                self.logger.warning(f"Skipping invalid PDF file: {pdf_file}")
+        
+        self.logger.info(f"Processing {len(valid_pdf_files)} valid PDF files out of {len(pdf_files)} found")
         
         # Process files in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

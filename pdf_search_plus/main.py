@@ -15,6 +15,10 @@ from pdf_search_plus.core import PDFProcessor
 from pdf_search_plus.core.ocr import TesseractOCRProcessor, EasyOCRProcessor
 from pdf_search_plus.gui import PDFSearchApp
 from pdf_search_plus.utils.db import PDFDatabase, PDFMetadata
+from pdf_search_plus.utils.security import (
+    validate_file_path, validate_folder_path, validate_pdf_file,
+    sanitize_filename
+)
 
 
 # Configure logging
@@ -137,25 +141,50 @@ class PDFSearchPlusApp:
         Args:
             pdf_path: Path to the PDF file
         """
-        try:
-            self.status_var.set(f"Processing: {Path(pdf_path).name}...")
+        # Validate the file path
+        if not validate_file_path(pdf_path):
+            error_msg = f"Invalid file path: {pdf_path}"
+            logger.error(error_msg)
+            self.status_var.set("Error: Invalid file path")
+            messagebox.showerror("Invalid File", error_msg)
+            return
             
-            # Create metadata
+        # Validate that the file is a valid PDF
+        if not validate_pdf_file(pdf_path):
+            error_msg = f"Not a valid PDF file: {pdf_path}"
+            logger.error(error_msg)
+            self.status_var.set("Error: Invalid PDF file")
+            messagebox.showerror("Invalid PDF", error_msg)
+            return
+            
+        try:
+            # Update status
+            file_name = sanitize_filename(Path(pdf_path).stem)
+            self.status_var.set(f"Processing: {file_name}...")
+            
+            # Create metadata with sanitized filename
             metadata = PDFMetadata(
-                file_name=Path(pdf_path).stem,
+                file_name=file_name,
                 file_path=pdf_path
             )
             
             # Process the PDF
             self.pdf_processor.process_pdf(metadata)
             
+            # Update status and log success
             logger.info(f"Successfully processed PDF: {pdf_path}")
-            self.status_var.set(f"Processed: {Path(pdf_path).name}")
-            messagebox.showinfo("Success", f"Successfully processed PDF: {Path(pdf_path).name}")
+            self.status_var.set(f"Processed: {file_name}")
+            messagebox.showinfo("Success", f"Successfully processed PDF: {file_name}")
+        except ValueError as e:
+            # Handle validation errors
+            logger.error(f"Validation error processing PDF {pdf_path}: {e}")
+            self.status_var.set("Error: Invalid PDF file")
+            messagebox.showerror("Validation Error", str(e))
         except Exception as e:
+            # Handle other errors
             logger.error(f"Error processing PDF {pdf_path}: {e}")
             self.status_var.set("Error processing PDF")
-            messagebox.showerror("Error", f"An error occurred while processing the PDF: {e}")
+            messagebox.showerror("Error", "An error occurred while processing the PDF file.")
     
     def process_pdf_folder(self, folder_path: str) -> None:
         """
@@ -164,19 +193,36 @@ class PDFSearchPlusApp:
         Args:
             folder_path: Path to the folder
         """
+        # Validate the folder path
+        if not validate_folder_path(folder_path):
+            error_msg = f"Invalid folder path: {folder_path}"
+            logger.error(error_msg)
+            self.status_var.set("Error: Invalid folder path")
+            messagebox.showerror("Invalid Folder", error_msg)
+            return
+            
         try:
-            self.status_var.set(f"Processing folder: {Path(folder_path).name}...")
+            # Update status
+            folder_name = sanitize_filename(Path(folder_path).name)
+            self.status_var.set(f"Processing folder: {folder_name}...")
             
             # Process the folder
             self.pdf_processor.process_folder(folder_path)
             
+            # Update status and log success
             logger.info(f"Successfully processed folder: {folder_path}")
-            self.status_var.set(f"Processed folder: {Path(folder_path).name}")
+            self.status_var.set(f"Processed folder: {folder_name}")
             messagebox.showinfo("Success", "Successfully processed all PDFs in the folder")
+        except ValueError as e:
+            # Handle validation errors
+            logger.error(f"Validation error processing folder {folder_path}: {e}")
+            self.status_var.set("Error: Invalid folder")
+            messagebox.showerror("Validation Error", str(e))
         except Exception as e:
+            # Handle other errors
             logger.error(f"Error processing folder {folder_path}: {e}")
             self.status_var.set("Error processing folder")
-            messagebox.showerror("Error", f"An error occurred while processing the folder: {e}")
+            messagebox.showerror("Error", "An error occurred while processing the folder.")
     
     def show_processing_dialog(self) -> None:
         """Show a dialog to select a PDF file or folder for processing."""
@@ -186,26 +232,65 @@ class PDFSearchPlusApp:
         )
         
         if scan_type == 'yes':
+            # Select a folder for batch processing
             folder_path = filedialog.askdirectory(
                 title="Select Folder with PDFs for Mass Scanning"
             )
-            if folder_path:
-                # Process the folder in a separate thread to avoid freezing the UI
-                threading.Thread(
-                    target=self.process_pdf_folder,
-                    args=(folder_path,)
-                ).start()
+            
+            if not folder_path:
+                # User cancelled the dialog
+                return
+                
+            # Validate the folder path
+            if not validate_folder_path(folder_path):
+                error_msg = f"Invalid folder path: {folder_path}"
+                logger.error(error_msg)
+                messagebox.showerror("Invalid Folder", error_msg)
+                return
+                
+            # Check if the folder contains any PDF files
+            pdf_files = list(Path(folder_path).glob("*.pdf"))
+            if not pdf_files:
+                warning_msg = f"No PDF files found in the selected folder: {folder_path}"
+                logger.warning(warning_msg)
+                messagebox.showwarning("No PDFs Found", warning_msg)
+                return
+                
+            # Process the folder in a separate thread to avoid freezing the UI
+            threading.Thread(
+                target=self.process_pdf_folder,
+                args=(folder_path,)
+            ).start()
         else:
+            # Select a single PDF file
             pdf_path = filedialog.askopenfilename(
                 title="Select PDF File",
                 filetypes=[("PDF Files", "*.pdf")]
             )
-            if pdf_path:
-                # Process the PDF in a separate thread to avoid freezing the UI
-                threading.Thread(
-                    target=self.process_pdf_file,
-                    args=(pdf_path,)
-                ).start()
+            
+            if not pdf_path:
+                # User cancelled the dialog
+                return
+                
+            # Validate the file path
+            if not validate_file_path(pdf_path):
+                error_msg = f"Invalid file path: {pdf_path}"
+                logger.error(error_msg)
+                messagebox.showerror("Invalid File", error_msg)
+                return
+                
+            # Validate that the file is a valid PDF
+            if not validate_pdf_file(pdf_path):
+                error_msg = f"Not a valid PDF file: {pdf_path}"
+                logger.error(error_msg)
+                messagebox.showerror("Invalid PDF", error_msg)
+                return
+                
+            # Process the PDF in a separate thread to avoid freezing the UI
+            threading.Thread(
+                target=self.process_pdf_file,
+                args=(pdf_path,)
+            ).start()
     
     def show_search_window(self) -> None:
         """Show the PDF search window."""

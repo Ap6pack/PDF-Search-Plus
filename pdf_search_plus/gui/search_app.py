@@ -10,8 +10,13 @@ from PIL import Image, ImageTk
 import threading
 import logging
 from typing import Optional, List, Tuple, Dict, Any
+from pathlib import Path
 
 from pdf_search_plus.utils.db import PDFDatabase
+from pdf_search_plus.utils.security import (
+    sanitize_text, sanitize_search_term, validate_file_path,
+    validate_pdf_file
+)
 
 
 class PDFSearchApp:
@@ -159,14 +164,26 @@ class PDFSearchApp:
             pdf_path: Path to the PDF file
             page_number: Page number to display
         """
-        if not os.path.exists(pdf_path):
-            messagebox.showerror("File Not Found", f"The file {pdf_path} does not exist.")
+        # Validate the file path
+        if not validate_file_path(pdf_path):
+            messagebox.showerror("Invalid File", f"The file path is invalid: {pdf_path}")
+            return
+            
+        # Validate that the file is a valid PDF
+        if not validate_pdf_file(pdf_path):
+            messagebox.showerror("Invalid PDF", f"The file is not a valid PDF: {pdf_path}")
             return
 
         try:
             self.current_pdf = pdf_path  # Store the current PDF path
             doc = fitz.open(pdf_path)
             self.total_pages = len(doc)  # Set the total number of pages
+            
+            # Validate the page number
+            if page_number < 1 or page_number > self.total_pages:
+                page_number = 1
+                self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
+                
             self.page_number = page_number  # Start at the provided page number
             self.show_pdf_page(page_number)
             
@@ -174,7 +191,7 @@ class PDFSearchApp:
             self.status_var.set(f"Loaded: {os.path.basename(pdf_path)} - Page {page_number} of {self.total_pages}")
         except Exception as e:
             self.logger.error(f"Error opening PDF: {e}")
-            messagebox.showerror("Error", f"An error occurred while opening the PDF: {e}")
+            messagebox.showerror("Error", "An error occurred while opening the PDF file.")
 
     def preview_selected_pdf(self) -> None:
         """Preview the selected PDF and display the corresponding page."""
@@ -222,21 +239,32 @@ class PDFSearchApp:
 
     def search_keywords(self) -> None:
         """Search the database for context in both PDF text and OCR-extracted text."""
-        search_term = self.context_entry.get()
-        if not search_term:
+        # Get the search term from the entry field
+        raw_search_term = self.context_entry.get()
+        
+        # Validate and sanitize the search term
+        if not raw_search_term:
             messagebox.showwarning("Empty Search", "Please enter a search term.")
+            return
+        
+        # Sanitize the search term to prevent SQL injection
+        search_term = sanitize_search_term(raw_search_term)
+        if not search_term:
+            messagebox.showwarning("Invalid Search", "The search term contains invalid characters.")
             return
             
         self.status_var.set(f"Searching for: {search_term}...")
         
         def search_db():
             try:
+                # Use the sanitized search term for the database query
                 rows = self.db.search_text(search_term)
                 self.root.after(0, self.update_treeview, rows)  # Safely update Treeview
                 self.root.after(0, lambda: self.status_var.set(f"Found {len(rows)} results for: {search_term}"))
             except Exception as e:
                 self.logger.error(f"Database error: {e}")
-                self.root.after(0, lambda error=e: messagebox.showerror("Database Error", str(error)))
+                # Don't expose detailed error messages to the user
+                self.root.after(0, lambda: messagebox.showerror("Database Error", "An error occurred while searching."))
                 self.root.after(0, lambda: self.status_var.set("Search error"))
 
         threading.Thread(target=search_db).start()
@@ -266,42 +294,73 @@ class PDFSearchApp:
         Args:
             page_number: Page number to display
         """
+        # Validate PDF state
         if self.current_pdf is None:
             messagebox.showerror("Error", "No PDF file loaded.")
             return
 
-        if not os.path.exists(self.current_pdf):
-            messagebox.showerror("File Not Found", f"The file {self.current_pdf} does not exist.")
+        # Validate file path
+        if not validate_file_path(self.current_pdf):
+            messagebox.showerror("Invalid File", f"The file path is invalid: {self.current_pdf}")
+            self.current_pdf = None
+            return
+            
+        # Validate PDF file
+        if not validate_pdf_file(self.current_pdf):
+            messagebox.showerror("Invalid PDF", f"The file is not a valid PDF: {self.current_pdf}")
+            self.current_pdf = None
             return
 
         try:
             # Clear the canvas
             self.canvas.delete("all")
             
+            # Open the PDF file
             doc = fitz.open(self.current_pdf)
-            page_index = page_number - 1  # Page number starts from 1
-
-            if 0 <= page_index < len(doc):
-                page = doc.load_page(page_index)
-                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
-
-                # Convert to a PIL Image
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-                # Convert the image to ImageTk format for tkinter
-                img_tk = ImageTk.PhotoImage(img)
-
-                # Configure canvas scrollregion
-                self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
+            
+            # Validate page number
+            if page_number < 1:
+                page_number = 1
+                self.page_number = 1
+                self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
+            elif page_number > len(doc):
+                page_number = len(doc)
+                self.page_number = len(doc)
+                self.logger.warning(f"Invalid page number {page_number}, defaulting to last page {len(doc)}")
                 
-                # Display the image in the canvas
-                self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
-                self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
-            else:
-                messagebox.showerror("Page Not Found", f"Page {page_number} is not valid.")
+            page_index = page_number - 1  # Page number starts from 1
+            page = doc.load_page(page_index)
+            
+            # Validate zoom factor
+            if self.zoom_factor < 0.5:
+                self.zoom_factor = 0.5
+                self.logger.warning("Zoom factor too small, setting to minimum (0.5)")
+            elif self.zoom_factor > 3.0:
+                self.zoom_factor = 3.0
+                self.logger.warning("Zoom factor too large, setting to maximum (3.0)")
+                
+            # Render the page
+            pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
+
+            # Convert to a PIL Image
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # Convert the image to ImageTk format for tkinter
+            img_tk = ImageTk.PhotoImage(img)
+
+            # Configure canvas scrollregion
+            self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
+            
+            # Display the image in the canvas
+            self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
+            self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
+            
+            # Update status bar
+            self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {len(doc)}")
         except Exception as e:
             self.logger.error(f"Error displaying PDF page: {e}")
-            messagebox.showerror("Error", f"An error occurred while displaying the PDF page: {e}")
+            # Don't expose detailed error messages to the user
+            messagebox.showerror("Error", "An error occurred while displaying the PDF page.")
 
     def clear_tree(self) -> None:
         """Clear the treeview."""

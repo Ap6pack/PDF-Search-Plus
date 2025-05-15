@@ -4,8 +4,13 @@ Database utilities for the PDF Search Plus application.
 
 import sqlite3
 import contextlib
+import re
+import html
 from typing import Optional, List, Tuple, Dict, Any, Union
 from dataclasses import dataclass
+from pathlib import Path
+
+from pdf_search_plus.utils.security import sanitize_text, sanitize_search_term
 
 
 @dataclass
@@ -14,6 +19,15 @@ class PDFMetadata:
     file_name: str
     file_path: str
     id: Optional[int] = None
+    
+    def __post_init__(self):
+        """Validate and sanitize metadata after initialization."""
+        # Sanitize file name
+        self.file_name = sanitize_text(self.file_name)
+        
+        # Ensure file path is a string
+        if isinstance(self.file_path, Path):
+            self.file_path = str(self.file_path)
 
 
 class PDFDatabase:
@@ -250,7 +264,13 @@ class PDFDatabase:
         Returns:
             List of matching results
         """
-        search_term = search_term.lower()
+        # Sanitize the search term to prevent SQL injection
+        sanitized_term = sanitize_search_term(search_term).lower()
+        
+        if not sanitized_term:
+            return []
+            
+        # Use parameterized queries to prevent SQL injection
         query = """
         SELECT pdf_files.id, pdf_files.file_name, pages.page_number, pages.text, 'PDF Text' as source
         FROM pages 
@@ -262,8 +282,28 @@ class PDFDatabase:
         JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
         WHERE LOWER(ocr_text.ocr_text) LIKE ?
         """
-        params = [f'%{search_term}%', f'%{search_term}%']
-        return self.execute_query(query, params) or []
+        params = [f'%{sanitized_term}%', f'%{sanitized_term}%']
+        
+        try:
+            results = self.execute_query(query, params) or []
+            
+            # Sanitize the results to prevent XSS
+            sanitized_results = []
+            for row in results:
+                pdf_id, file_name, page_number, text, source = row
+                sanitized_results.append((
+                    pdf_id,
+                    sanitize_text(file_name),
+                    page_number,
+                    sanitize_text(text),
+                    source
+                ))
+            
+            return sanitized_results
+        except sqlite3.Error as e:
+            # Log the error but don't expose details to the caller
+            print(f"Database error: {e}")
+            return []
 
 
 # For backward compatibility
