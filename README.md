@@ -14,9 +14,9 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 - [Features](#features)
 - [Installation](#installation)
-  - [Install from Source](#install-from-source)
-  - [OCR Engine Requirements](#ocr-engine-requirements)
-- [Requirements](#requirements)
+  - [Setup](#setup)
+  - [Tesseract OCR Installation](#tesseract-ocr-installation)
+- [Python Dependencies](#python-dependencies)
 - [Usage](#usage)
   - [Running the Application](#running-the-application)
   - [Application Workflow](#application-workflow)
@@ -45,7 +45,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 ## Installation
 
-### Install from Source
+### Setup
 
 1. Clone the repository:
    ```bash
@@ -53,16 +53,14 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
    cd pdf-search-plus
    ```
 
-2. Install the package:
+2. Install the dependencies:
    ```bash
-   pip install -e .
+   pip install -r requirements.txt
    ```
 
-### OCR Engine Requirements
+### Tesseract OCR Installation
 
-#### Tesseract OCR
-
-Tesseract OCR is required for the application to function:
+The application requires the Tesseract OCR command-line tool to be installed on your system:
 
 - On Ubuntu:
   ```bash
@@ -75,15 +73,11 @@ Tesseract OCR is required for the application to function:
 - On Windows:
   Download and install from [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki).
 
-Ensure that `tesseract` is in your system's PATH.
+Ensure that the `tesseract` command is in your system's PATH. The application calls this command directly rather than using a Python wrapper.
 
-## Requirements
+## Python Dependencies
 
-All dependencies are specified in the `requirements.txt` file. Install them using:
-
-```bash
-pip install -r requirements.txt
-```
+All Python dependencies are specified in the `requirements.txt` file and should be installed as mentioned in the Installation section above.
 
 ### Dependency Conflicts
 
