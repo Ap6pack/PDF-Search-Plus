@@ -1,6 +1,33 @@
 # PDF Search Plus
 
-A powerful tool for extracting and searching text from PDF files, with OCR capabilities using Tesseract.
+<div align="center">
+
+![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-green)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+</div>
+
+PDF Search Plus is a powerful Python application that processes PDF files by extracting text from pages and images, applying OCR (Optical Character Recognition) to images, and storing the results in a SQLite database. It provides a graphical user interface (GUI) built with Tkinter to search and preview the PDF content, including OCR-extracted text.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+  - [Setup](#setup)
+  - [Tesseract OCR Installation](#tesseract-ocr-installation)
+- [Python Dependencies](#python-dependencies)
+- [Usage](#usage)
+  - [Running the Application](#running-the-application)
+  - [Application Workflow](#application-workflow)
+- [Package Structure](#package-structure)
+- [Database Schema](#database-schema)
+- [Performance Optimizations](#performance-optimizations)
+- [Security Features](#security-features)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+- [Future Enhancements](#future-enhancements)
 
 ## Features
 
