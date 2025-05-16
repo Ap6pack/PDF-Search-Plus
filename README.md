@@ -3,7 +3,7 @@
 <div align="center">
 
 ![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
-![Version](https://img.shields.io/badge/version-2.0.0-green)
+![Version](https://img.shields.io/badge/version-2.2.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -14,7 +14,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 - [Features](#features)
 - [Installation](#installation)
-  - [Install from Source](#option-1-install-from-source)
+  - [Install from Source](#install-from-source)
   - [OCR Engine Requirements](#ocr-engine-requirements)
 - [Requirements](#requirements)
 - [Usage](#usage)
@@ -32,7 +32,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 ## Features
 
 - Extracts and stores text from PDF pages
-- Extracts images from PDF pages and applies OCR using Tesseract or EasyOCR
+- Extracts images from PDF pages and applies OCR using Tesseract
 - Stores image metadata and OCR-extracted text in a SQLite database
 - Provides a user-friendly GUI for searching through the stored data
 - Allows for both single-file and folder-based (batch) PDF processing
@@ -45,7 +45,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 ## Installation
 
-### Option 1: Install from Source
+### Install from Source
 
 1. Clone the repository:
    ```bash
@@ -62,7 +62,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 #### Tesseract OCR
 
-If you want to use Tesseract OCR (default):
+Tesseract OCR is required for the application to function:
 
 - On Ubuntu:
   ```bash
@@ -77,10 +77,6 @@ If you want to use Tesseract OCR (default):
 
 Ensure that `tesseract` is in your system's PATH.
 
-#### EasyOCR
-
-EasyOCR is included in the package dependencies and doesn't require separate installation.
-
 ## Requirements
 
 All dependencies are specified in the `requirements.txt` file. Install them using:
@@ -89,33 +85,66 @@ All dependencies are specified in the `requirements.txt` file. Install them usin
 pip install -r requirements.txt
 ```
 
+### Dependency Conflicts
+
+When installing the requirements, you may encounter dependency conflicts, particularly with numpy versions. If you see errors related to numpy version conflicts (e.g., with packages like thinc or spacy), you may need to uninstall the conflicting packages:
+
+```bash
+pip uninstall -y thinc spacy
+pip install -r requirements.txt
+```
+
+This is because the application requires numpy<2.0 for compatibility with pandas 2.2.0, which may conflict with other packages that require numpy>=2.0.0.
+
 ## Usage
 
 ### Running the Application
 
 #### Using the Command Line
 
-1. Run with Tesseract OCR (default):
-   ```bash
-   python -m pdf_search_plus.main
-   ```
+The application can be run using the unified command-line script:
 
-2. Run with EasyOCR:
-   ```bash
-   python -m pdf_search_plus.main --easyocr
-   ```
+```bash
+python run_pdf_search.py [options]
+```
 
-#### Using the Provided Scripts
+##### Options:
 
-1. Run with Tesseract OCR:
+- `--verbose`, `-v`: Enable verbose logging
+- `--process-file FILE`: Process a single PDF file without launching the GUI
+- `--process-folder FOLDER`: Process all PDF files in a folder without launching the GUI
+- `--search TERM`: Search for a term in the database without launching the GUI
+- `--max-workers N`: Maximum number of worker threads for batch processing (default: 5)
+
+##### Examples:
+
+1. Launch the GUI:
    ```bash
    python run_pdf_search.py
    ```
 
-2. Run with EasyOCR:
+2. Process a single PDF file from the command line:
    ```bash
-   python run_pdf_search_easyocr.py
+   python run_pdf_search.py --process-file path/to/document.pdf
    ```
+
+3. Process a folder of PDF files:
+   ```bash
+   python run_pdf_search.py --process-folder path/to/folder
+   ```
+
+4. Search the database from the command line:
+   ```bash
+   python run_pdf_search.py --search "search term"
+   ```
+
+#### Using the Python Module
+
+You can also run the application as a Python module:
+
+```bash
+python -m pdf_search_plus.main
+```
 
 ### Application Workflow
 
@@ -151,8 +180,7 @@ pdf_search_plus/
 │   └── ocr/
 │       ├── __init__.py
 │       ├── base.py
-│       ├── tesseract.py
-│       └── easyocr.py
+│       └── tesseract.py
 ├── gui/
 │   ├── __init__.py
 │   └── search_app.py
@@ -246,7 +274,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for PDF processing capabilities
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for text recognition
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR) for alternative OCR processing
 - [SQLite](https://www.sqlite.org/) for database functionality
 - All contributors who have helped improve this project
 

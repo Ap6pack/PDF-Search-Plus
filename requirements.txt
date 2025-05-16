@@ -1,8 +1,7 @@
-PyMuPDF>=1.25.5
-Pillow>=8.0.0
-pytesseract>=0.3.13
-threaded>=4.2.0
-numpy>=2.2.5
-psutil>=7.0.0
-cachetools>=5.5.2
-tqdm>=4.67.1
+PyMuPDF>=1.18.0
+Pillow>=9.2.0,<11.0        # Compatible with moviepy 2.1.2
+threaded>=4.1.0
+numpy>=1.26.0,<2.0         # Compatible with pandas 2.2.0 for Python 3.12
+psutil>=6.0.0,<6.1         # Compatible with safety 3.2.9
+cachetools>=4.2.0
+tqdm>=4.60.0

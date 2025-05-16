@@ -5,6 +5,25 @@ All notable changes to the PDF-Search-Plus project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-05-15
+
+### Changed
+- Removed EasyOCR support, now using only Pytesseract for OCR on both Windows and Linux
+- Simplified OCR engine selection by standardizing on Tesseract
+
+## [2.1.0] - 2025-05-15
+
+### Changed
+- Major code refactoring to eliminate duplication
+- Consolidated PDF processing logic into a single implementation
+- Unified GUI implementation
+- Simplified entry points with a single runner script
+- Removed work-in-progress files
+
+### Added
+- Comprehensive refactoring plan (REFACTORING.md)
+- Improved documentation for the unified codebase
+
 ## [2.0.0] - 2025-05-15
 
 ### Added

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from pdf_search_plus.core import PDFProcessor
-from pdf_search_plus.core.ocr import TesseractOCRProcessor, EasyOCRProcessor
+from pdf_search_plus.core.ocr import TesseractOCRProcessor
 from pdf_search_plus.gui import PDFSearchApp
 from pdf_search_plus.utils.db import PDFDatabase, PDFMetadata
 from pdf_search_plus.utils.security import (
@@ -39,23 +39,15 @@ class PDFSearchPlusApp:
     access to the PDF processing and search functionality.
     """
     
-    def __init__(self, use_easyocr: bool = False):
+    def __init__(self):
         """
         Initialize the application.
-        
-        Args:
-            use_easyocr: Whether to use EasyOCR instead of Tesseract
         """
-        self.use_easyocr = use_easyocr
         self.db = PDFDatabase()
         
         # Create the OCR processor
-        if use_easyocr:
-            self.ocr_processor = EasyOCRProcessor()
-            logger.info("Using EasyOCR for text extraction")
-        else:
-            self.ocr_processor = TesseractOCRProcessor()
-            logger.info("Using Tesseract for text extraction")
+        self.ocr_processor = TesseractOCRProcessor()
+        logger.info("Using Tesseract for text extraction")
         
         # Create the PDF processor
         self.pdf_processor = PDFProcessor(self.ocr_processor, self.db)
@@ -92,10 +84,9 @@ class PDFSearchPlusApp:
         title_label.pack(pady=10)
         
         # Add a subtitle with OCR engine info
-        ocr_engine = "EasyOCR" if self.use_easyocr else "Tesseract"
         subtitle_label = tk.Label(
             frame,
-            text=f"Using {ocr_engine} for OCR",
+            text="Using Tesseract for OCR",
             font=("Helvetica", 10)
         )
         subtitle_label.pack(pady=5)
@@ -318,23 +309,15 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="PDF Search Plus - PDF text extraction and search with OCR"
     )
-    parser.add_argument(
-        "--easyocr",
-        action="store_true",
-        help="Use EasyOCR instead of Tesseract for OCR"
-    )
     return parser.parse_args()
 
 
-def main(use_easyocr: bool = False) -> None:
+def main() -> None:
     """
     Main entry point for the application.
-    
-    Args:
-        use_easyocr: Whether to use EasyOCR instead of Tesseract
     """
     try:
-        app = PDFSearchPlusApp(use_easyocr=use_easyocr)
+        app = PDFSearchPlusApp()
         app.run()
     except Exception as e:
         logger.error(f"Application error: {e}")
@@ -343,4 +326,4 @@ def main(use_easyocr: bool = False) -> None:
 
 if __name__ == "__main__":
     args = parse_args()
-    main(use_easyocr=args.easyocr)
+    main()

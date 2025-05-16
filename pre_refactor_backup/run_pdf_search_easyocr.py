@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Entry point script for the PDF Search Plus application.
+Entry point script for the PDF Search Plus application using EasyOCR.
 
-This script provides a command-line interface to the PDF Search Plus application,
-allowing users to extract text from PDF files and search through them.
+This script provides a simplified way to run the PDF Search Plus application
+with EasyOCR as the OCR engine instead of Tesseract.
 """
 
 import argparse
@@ -25,8 +25,8 @@ root_logger.addHandler(console_handler)
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="PDF Search Plus - PDF text extraction and search with OCR",
-        epilog="Example: python run_pdf_search.py --verbose"
+        description="PDF Search Plus with EasyOCR - PDF text extraction and search",
+        epilog="This script runs PDF Search Plus with EasyOCR by default"
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -44,5 +44,5 @@ if __name__ == "__main__":
         root_logger.setLevel(logging.DEBUG)
         logging.info("Verbose logging enabled")
     
-    # Run the application
-    main()
+    # Run the application with EasyOCR
+    main(use_easyocr=True)
