@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.4.1] - 2025-05-16
+- Fixed database utility functions for better backward compatibility
+- Corrected cache module imports to use proper class names
+- Improved error handling in database operations
+- Enhanced code maintainability with proper delegation patterns
+
 ## [2.4.0] - 2025-05-16
 - Implemented PDF annotations support
 - Added document similarity search using TF-IDF and cosine similarity

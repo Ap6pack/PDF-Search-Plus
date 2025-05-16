@@ -18,6 +18,55 @@ from pathlib import Path
 from pdf_search_plus.utils.security import sanitize_text, sanitize_search_term
 
 
+# Standalone functions for backward compatibility
+def create_database(db_name: str = "pdf_data.db") -> None:
+    """
+    Create the SQLite database and tables for storing PDF data.
+    
+    This function is maintained for backward compatibility.
+    It delegates to the PDFDatabase class method.
+    
+    Args:
+        db_name: Name of the database file
+    """
+    db = PDFDatabase(db_name)
+    db.create_database()
+
+def get_connection(db_name: str = "pdf_data.db") -> sqlite3.Connection:
+    """
+    Get a connection to the SQLite database.
+    
+    This function is maintained for backward compatibility.
+    It delegates to the PDFDatabase class method.
+    
+    Args:
+        db_name: Name of the database file
+        
+    Returns:
+        A SQLite connection object
+    """
+    db = PDFDatabase(db_name)
+    return db.get_connection()
+
+def execute_query(query: str, params: tuple = (), db_name: str = "pdf_data.db") -> Optional[List[Tuple]]:
+    """
+    Execute a SQL query and return the results.
+    
+    This function is maintained for backward compatibility.
+    It delegates to the PDFDatabase class method.
+    
+    Args:
+        query: SQL query to execute
+        params: Parameters for the query
+        db_name: Name of the database file
+        
+    Returns:
+        Query results as a list of tuples, or None for non-SELECT queries
+    """
+    db = PDFDatabase(db_name)
+    return db.execute_query(query, params)
+
+
 @dataclass
 class PDFMetadata:
     """

@@ -10,4 +10,4 @@ from pdf_search_plus.core.ocr import TesseractOCRProcessor
 from pdf_search_plus.gui import PDFSearchApp
 from pdf_search_plus.utils.db import PDFDatabase, PDFMetadata
 
-__version__ = "2.2.0"
+__version__ = "2.4.1"

@@ -8,7 +8,7 @@ from pdf_search_plus.utils.security import (
     validate_pdf_file, is_safe_filename, sanitize_filename
 )
 from pdf_search_plus.utils.cache import (
-    LRUCache, DiskCache, memoize, SearchResultCache,
+    MemoryAwareLRUCache, EnhancedDiskCache, memoize, SearchResultCache,
     pdf_cache, image_cache, search_cache, disk_cache
 )
 from pdf_search_plus.utils.memory import (
@@ -26,7 +26,7 @@ __all__ = [
     'validate_pdf_file', 'is_safe_filename', 'sanitize_filename',
     
     # Caching utilities
-    'LRUCache', 'DiskCache', 'memoize', 'SearchResultCache',
+    'MemoryAwareLRUCache', 'EnhancedDiskCache', 'memoize', 'SearchResultCache',
     'pdf_cache', 'image_cache', 'search_cache', 'disk_cache',
     
     # Memory management utilities
