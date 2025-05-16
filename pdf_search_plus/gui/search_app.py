@@ -16,7 +16,7 @@ from pathlib import Path
 from pdf_search_plus.utils.db import PDFDatabase
 from pdf_search_plus.utils.security import (
     sanitize_text, sanitize_search_term, validate_file_path,
-    validate_pdf_file
+    validate_pdf_file, validate_page_number, validate_zoom_factor
 )
 from pdf_search_plus.utils.cache import (
     pdf_cache, image_cache, search_cache
@@ -232,11 +232,7 @@ class PDFSearchApp:
             self.total_pages = len(doc)  # Set the total number of pages
             
             # Validate the page number
-            if page_number < 1 or page_number > self.total_pages:
-                page_number = 1
-                self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
-                
-            self.page_number = page_number  # Start at the provided page number
+            self.page_number = validate_page_number(page_number, self.total_pages)
             self.show_pdf_page(page_number)
             
             # Update status bar
@@ -283,11 +279,10 @@ class PDFSearchApp:
         Args:
             delta: Change in zoom factor
         """
-        new_zoom = self.zoom_factor + delta
-        if 0.5 <= new_zoom <= 3.0:  # Set a range for zoom factor
-            self.zoom_factor = new_zoom
-            self.show_pdf_page(self.page_number)
-            self.status_var.set(f"Zoom: {int(self.zoom_factor * 100)}%")
+        # Validate and update zoom factor
+        self.zoom_factor = validate_zoom_factor(self.zoom_factor + delta)
+        self.show_pdf_page(self.page_number)
+        self.status_var.set(f"Zoom: {int(self.zoom_factor * 100)}%")
 
     def next_results_page(self) -> None:
         """Go to the next page of search results."""
@@ -478,25 +473,18 @@ class PDFSearchApp:
                 doc = fitz.open(self.current_pdf)
                 
                 # Validate page number
-                if page_number < 1:
-                    page_number = 1
-                    self.page_number = 1
-                    self.logger.warning(f"Invalid page number {page_number}, defaulting to page 1")
-                elif page_number > len(doc):
-                    page_number = len(doc)
-                    self.page_number = len(doc)
-                    self.logger.warning(f"Invalid page number {page_number}, defaulting to last page {len(doc)}")
-                    
+                validated_page = validate_page_number(page_number, len(doc))
+                if validated_page != page_number:
+                    page_number = validated_page
+                    self.page_number = validated_page
+                
                 page_index = page_number - 1  # Page number starts from 1
                 page = doc.load_page(page_index)
                 
                 # Validate zoom factor
-                if self.zoom_factor < 0.5:
-                    self.zoom_factor = 0.5
-                    self.logger.warning("Zoom factor too small, setting to minimum (0.5)")
-                elif self.zoom_factor > 3.0:
-                    self.zoom_factor = 3.0
-                    self.logger.warning("Zoom factor too large, setting to maximum (3.0)")
+                validated_zoom = validate_zoom_factor(self.zoom_factor)
+                if validated_zoom != self.zoom_factor:
+                    self.zoom_factor = validated_zoom
                     
                 # Render the page
                 pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))

@@ -389,9 +389,8 @@ class PDFDatabase:
                 ORDER BY last_accessed DESC
                 LIMIT ? OFFSET ?
                 """
-                # Format the search term for LIKE
-                like_term = f"%{sanitized_term}%"  # Use LIKE with wildcards
-                params = (like_term, like_term, limit, offset)
+                # Use parameterized query with LIKE wildcards
+                params = (f"%{sanitized_term}%", f"%{sanitized_term}%", limit, offset)
             else:
                 # Use LIKE for more flexible but slower search
                 query = """
@@ -422,7 +421,7 @@ class PDFDatabase:
                 ORDER BY last_accessed DESC
                 LIMIT ? OFFSET ?
                 """
-                params = (f'%{sanitized_term}%', f'%{sanitized_term}%', limit, offset)
+                params = (f"%{sanitized_term}%", f"%{sanitized_term}%", limit, offset)
             
             # Execute the query
             results = self.execute_query(query, params) or []
@@ -489,9 +488,8 @@ class PDFDatabase:
                     WHERE ocr_text.ocr_text LIKE ?
                 )
                 """
-                # Format the search term for FTS5
-                fts_term = f"%{sanitized_term}%"  # Use LIKE with wildcards
-                params = (fts_term, fts_term)
+                # Use parameterized query with LIKE wildcards
+                params = (f"%{sanitized_term}%", f"%{sanitized_term}%")
             else:
                 # Use LIKE for more flexible but slower search
                 query = """
@@ -509,7 +507,7 @@ class PDFDatabase:
                     WHERE ocr_text.ocr_text LIKE ?
                 )
                 """
-                params = (f'%{sanitized_term}%', f'%{sanitized_term}%')
+                params = (f"%{sanitized_term}%", f"%{sanitized_term}%")
             
             # Execute the query
             result = self.execute_query(query, params)
