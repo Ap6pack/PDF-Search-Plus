@@ -1,6 +1,33 @@
 # PDF Search Plus
 
-PDF Search Plus is a Python application that processes PDF files by extracting text from pages and images, applying OCR (Optical Character Recognition) to images, and storing the results in a SQLite database. It provides a graphical user interface (GUI) built with Tkinter to search and preview the PDF content, including OCR-extracted text.
+<div align="center">
+
+![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-green)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+</div>
+
+PDF Search Plus is a powerful Python application that processes PDF files by extracting text from pages and images, applying OCR (Optical Character Recognition) to images, and storing the results in a SQLite database. It provides a graphical user interface (GUI) built with Tkinter to search and preview the PDF content, including OCR-extracted text.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+  - [Install from Source](#option-1-install-from-source)
+  - [OCR Engine Requirements](#ocr-engine-requirements)
+- [Requirements](#requirements)
+- [Usage](#usage)
+  - [Running the Application](#running-the-application)
+  - [Application Workflow](#application-workflow)
+- [Package Structure](#package-structure)
+- [Database Schema](#database-schema)
+- [Performance Optimizations](#performance-optimizations)
+- [Security Features](#security-features)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+- [Future Enhancements](#future-enhancements)
 
 ## Features
 
@@ -54,19 +81,13 @@ Ensure that `tesseract` is in your system's PATH.
 
 EasyOCR is included in the package dependencies and doesn't require separate installation.
 
-## Dependencies
+## Requirements
 
-The application requires the following Python packages:
+All dependencies are specified in the `requirements.txt` file. Install them using:
 
-- `PyMuPDF>=1.18.0` - For PDF processing
-- `Pillow>=8.0.0` - For image processing
-- `pytesseract>=0.3.8` - For Tesseract OCR integration
-- `easyocr>=1.4.1` - For EasyOCR integration
-- `numpy>=1.20.0` - For numerical operations
-- `threaded>=4.1.0` - For multi-threading support
-- `psutil>=5.8.0` - For memory usage monitoring
-- `cachetools>=4.2.0` - For caching capabilities
-- `tqdm>=4.60.0` - For progress tracking
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
@@ -205,9 +226,29 @@ The database includes indexes for better performance:
 - **Sanitization**: Text is sanitized to prevent XSS and other injection attacks
 - **SQL Injection Protection**: Parameterized queries are used to prevent SQL injection
 
+## Contributing
+
+Contributions are welcome! Here's how you can contribute to PDF Search Plus:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please make sure to update tests as appropriate and adhere to the existing coding style.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for PDF processing capabilities
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for text recognition
+- [EasyOCR](https://github.com/JaidedAI/EasyOCR) for alternative OCR processing
+- [SQLite](https://www.sqlite.org/) for database functionality
+- All contributors who have helped improve this project
 
 ## Future Enhancements
 
