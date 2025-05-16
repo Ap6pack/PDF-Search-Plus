@@ -3,7 +3,7 @@
 <div align="center">
 
 ![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
-![Version](https://img.shields.io/badge/version-2.2.1-green)
+![Version](https://img.shields.io/badge/version-2.3.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -41,7 +41,9 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 - **Caching system** for PDF pages, search results, and images to improve performance
 - **Memory management** for efficiently handling large PDFs
 - **Pagination** for search results to handle large document collections
-- **Robust search** capabilities with SQL LIKE for reliable and flexible text matching
+- **Robust search** capabilities with optimized Full-Text Search for fast and accurate results
+- **Document categorization and tagging** for better organization of PDF files
+- **Memory-aware caching** that adapts to system resources for optimal performance
 
 ## Installation
 
@@ -185,7 +187,8 @@ pdf_search_plus/
     ├── db.py
     ├── cache.py
     ├── memory.py
-    └── security.py
+    ├── security.py
+    └── tag_manager.py
 ```
 
 ## Database Schema
@@ -219,38 +222,64 @@ The application stores PDF data in an SQLite database called `pdf_data.db` with 
   - `pdf_id`: Foreign key to pdf_files
   - `page_number`: Page number
   - `ocr_text`: Text extracted via OCR
+  
+- **tags**: Stores document tags for categorization
+  - `id`: Primary key
+  - `name`: Tag name
+  - `color`: Tag color (hex code)
+  - `created_at`: Timestamp when the tag was created
+
+- **categories**: Stores hierarchical document categories
+  - `id`: Primary key
+  - `name`: Category name
+  - `parent_id`: Foreign key to parent category (for hierarchical structure)
+  - `created_at`: Timestamp when the category was created
+
+- **pdf_tags**: Many-to-many relationship between PDFs and tags
+  - `pdf_id`: Foreign key to pdf_files
+  - `tag_id`: Foreign key to tags
+  - `created_at`: Timestamp when the relationship was created
+
+- **pdf_categories**: Many-to-many relationship between PDFs and categories
+  - `pdf_id`: Foreign key to pdf_files
+  - `category_id`: Foreign key to categories
+  - `created_at`: Timestamp when the relationship was created
 
 ### Search Functionality
 
 The application provides robust search capabilities:
 
-- **LIKE-based Search**: Uses SQL LIKE operator with wildcards for flexible text matching
-- **Full-Text Search Tables**: The database includes FTS5 virtual tables for potential future optimization:
-  - **fts_content**: FTS5 virtual table for PDF text
-  - **fts_ocr**: FTS5 virtual table for OCR text
+- **Optimized Full-Text Search**: Uses FTS5 virtual tables with porter stemming for fast and accurate text matching
+- **Tag-Based Search**: Find documents by assigned tags with options for ANY or ALL tag matching
+- **Category-Based Organization**: Browse documents by hierarchical categories
+- **Combined Search**: Search by text content and tags simultaneously
 
 ### Indexes
 
-The database includes indexes for better performance:
+The database includes optimized indexes for better performance:
 
-- Indexes on `pdf_id` columns for faster joins
-- Indexes on text columns for faster searching
+- Compound indexes on `pdf_id` and `page_number` for faster joins
+- Specialized indexes for text columns for faster searching
 - Indexes on file name and path for faster lookups
+- Indexes for tag and category relationships
 
 ## Performance Optimizations
 
-- **Caching**: The application caches PDF pages, search results, and images to improve performance
+- **Memory-Aware Caching**: The application monitors system memory and adapts cache size dynamically
+- **Optimized FTS5 Search**: Uses porter stemming and prefix matching for faster and more accurate searches
 - **Memory Management**: Large PDFs are processed in a streaming fashion to reduce memory usage
 - **Batch Processing**: Images are processed in batches to limit memory consumption
-- **Optimized Search**: SQL LIKE with wildcards for reliable and flexible text searching
+- **Time-Based Cache Expiration**: Automatically expires cached items after a specified time
 - **Pagination**: Search results are paginated to handle large result sets efficiently
 
 ## Security Features
 
-- **Input Validation**: All user inputs are validated before processing
-- **Path Validation**: File paths are validated to prevent path traversal attacks
-- **Sanitization**: Text is sanitized to prevent XSS and other injection attacks
-- **SQL Injection Protection**: Parameterized queries are used to prevent SQL injection
+- **Enhanced Input Validation**: All user inputs are validated with comprehensive checks
+- **Secure Path Validation**: File paths are validated to prevent path traversal attacks
+- **Secure Temporary Files**: Temporary files are created with proper permissions and cleanup
+- **Text Sanitization**: All text is sanitized to prevent XSS and other injection attacks
+- **SQL Injection Protection**: Parameterized queries are used throughout the application
+- **Memory Pressure Detection**: The application monitors and responds to system memory pressure
 
 ## Contributing
 
@@ -275,12 +304,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [SQLite](https://www.sqlite.org/) for database functionality
 - All contributors who have helped improve this project
 
+## Document Tagging and Categorization
+
+The application now supports document tagging and categorization:
+
+- **Tags**: Assign colored tags to documents for quick identification and filtering
+- **Categories**: Organize documents in hierarchical categories
+- **Tag-Based Search**: Find documents by their assigned tags
+- **Multiple Tags**: Assign multiple tags to each document
+- **Tag Management**: Create, update, and delete tags
+- **Category Hierarchy**: Create nested categories for better organization
+
 ## Future Enhancements
 
 - Add support for exporting search results
 - Improve image OCR accuracy with advanced preprocessing
 - Add annotations for highlighted text in preview mode
 - Support for more languages in OCR
-- Add document categorization and tagging
 - Implement document similarity search
 - Add support for PDF form field extraction
+- Enhance tag visualization with tag clouds

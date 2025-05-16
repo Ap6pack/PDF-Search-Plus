@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.0] - 2025-05-16
+- Implemented document categorization and tagging system
+- Enhanced database schema with tags and categories tables
+- Optimized FTS5 search with porter stemming and prefix matching
+- Improved caching system with memory-aware LRU cache
+- Added time-based cache expiration for better resource management
+- Enhanced security with secure temporary file handling
+- Improved input validation for all user inputs
+- Added comprehensive docstrings and type hints throughout the codebase
+
 ## [2.2.1] - 2025-05-15
 - Enhanced run_pdf_search.py with improved database setup, error handling, and command-line options
 - Updated README with comprehensive documentation and improved installation instructions
