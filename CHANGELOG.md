@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.2] - 2025-05-16
+- Fixed FTS5 search query to use correct column names
+- Corrected snippet function parameters for better search result highlighting
+
 ## [2.4.1] - 2025-05-16
 - Fixed database utility functions for better backward compatibility
 - Corrected cache module imports to use proper class names

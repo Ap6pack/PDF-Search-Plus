@@ -548,7 +548,7 @@ class PDFDatabase:
                     pdf_files.id, 
                     pdf_files.file_name, 
                     fts.page_number, 
-                    snippet(fts_content, 0, '<mark>', '</mark>', '...', 15) as text_snippet, 
+                    snippet(fts_content, 2, '<mark>', '</mark>', '...', 15) as text_snippet, 
                     'PDF Text' as source,
                     pdf_files.last_accessed
                 FROM 
@@ -556,7 +556,7 @@ class PDFDatabase:
                 JOIN 
                     pdf_files ON fts.pdf_id = pdf_files.id
                 WHERE 
-                    fts_content MATCH ?
+                    fts.content MATCH ?
                 
                 UNION
                 
@@ -564,7 +564,7 @@ class PDFDatabase:
                     pdf_files.id, 
                     pdf_files.file_name, 
                     fts.page_number, 
-                    snippet(fts_ocr, 0, '<mark>', '</mark>', '...', 15) as text_snippet, 
+                    snippet(fts_ocr, 2, '<mark>', '</mark>', '...', 15) as text_snippet, 
                     'OCR Text' as source,
                     pdf_files.last_accessed
                 FROM 
@@ -572,7 +572,7 @@ class PDFDatabase:
                 JOIN 
                     pdf_files ON fts.pdf_id = pdf_files.id
                 WHERE 
-                    fts_ocr MATCH ?
+                    fts.content MATCH ?
                 
                 ORDER BY 
                     last_accessed DESC
@@ -676,13 +676,13 @@ class PDFDatabase:
                 SELECT COUNT(*) FROM (
                     SELECT 1
                     FROM fts_content
-                    WHERE fts_content MATCH ?
+                    WHERE content MATCH ?
                     
                     UNION
                     
                     SELECT 1
                     FROM fts_ocr
-                    WHERE fts_ocr MATCH ?
+                    WHERE content MATCH ?
                 )
                 """
                 # Format search term for FTS5 MATCH
