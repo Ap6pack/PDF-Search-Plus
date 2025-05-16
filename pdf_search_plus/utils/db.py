@@ -520,44 +520,4 @@ class PDFDatabase:
             return 0
 
 
-# For backward compatibility
-def create_database(db_name: str = "pdf_data.db") -> None:
-    """
-    Create the SQLite database and tables for storing PDF data.
-    
-    Args:
-        db_name: Name of the database file to create
-    """
-    db = PDFDatabase(db_name)
-    db.create_database()
-
-
-def get_connection(db_name: str = "pdf_data.db") -> sqlite3.Connection:
-    """
-    Get a connection to the SQLite database.
-    
-    Args:
-        db_name: Name of the database file to connect to
-        
-    Returns:
-        A SQLite connection object
-    """
-    conn = sqlite3.connect(db_name, check_same_thread=False)
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-def execute_query(query: str, params: tuple = (), db_name: str = "pdf_data.db") -> Optional[list]:
-    """
-    Execute a SQL query and return the results.
-    
-    Args:
-        query: SQL query to execute
-        params: Parameters for the query
-        db_name: Name of the database file
-        
-    Returns:
-        Query results as a list of tuples, or None for non-SELECT queries
-    """
-    db = PDFDatabase(db_name)
-    return db.execute_query(query, params)
+# Legacy standalone functions have been deprecated in favor of the PDFDatabase class.
