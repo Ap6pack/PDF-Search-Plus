@@ -3,7 +3,7 @@
 <div align="center">
 
 ![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
-![Version](https://img.shields.io/badge/version-2.3.0-green)
+![Version](https://img.shields.io/badge/version-2.4.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -43,6 +43,8 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 - **Pagination** for search results to handle large document collections
 - **Robust search** capabilities with optimized Full-Text Search for fast and accurate results
 - **Document categorization and tagging** for better organization of PDF files
+- **PDF annotations** for highlighting and adding notes to documents
+- **Document similarity search** for finding related documents
 - **Memory-aware caching** that adapts to system resources for optimal performance
 
 ## Installation
@@ -188,7 +190,9 @@ pdf_search_plus/
     ├── cache.py
     ├── memory.py
     ├── security.py
-    └── tag_manager.py
+    ├── tag_manager.py
+    ├── annotation_manager.py
+    └── similarity_search.py
 ```
 
 ## Database Schema
@@ -306,7 +310,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Document Tagging and Categorization
 
-The application now supports document tagging and categorization:
+The application supports document tagging and categorization:
 
 - **Tags**: Assign colored tags to documents for quick identification and filtering
 - **Categories**: Organize documents in hierarchical categories
@@ -315,12 +319,30 @@ The application now supports document tagging and categorization:
 - **Tag Management**: Create, update, and delete tags
 - **Category Hierarchy**: Create nested categories for better organization
 
+## PDF Annotations
+
+The application now supports PDF annotations:
+
+- **Highlight Text**: Highlight important text in documents
+- **Add Notes**: Add notes to specific parts of documents
+- **Multiple Annotation Types**: Support for highlights, notes, underlines, and more
+- **Annotation Search**: Search for text within annotations
+- **Color Coding**: Assign different colors to annotations for better organization
+
+## Document Similarity Search
+
+Find similar documents based on content:
+
+- **TF-IDF Vectorization**: Convert document text into numerical vectors
+- **Cosine Similarity**: Measure similarity between documents
+- **Document Clustering**: Group similar documents together
+- **Text-Based Search**: Find documents similar to a text query
+- **Threshold Control**: Adjust similarity threshold for more or fewer results
+
 ## Future Enhancements
 
 - Add support for exporting search results
 - Improve image OCR accuracy with advanced preprocessing
-- Add annotations for highlighted text in preview mode
 - Support for more languages in OCR
-- Implement document similarity search
 - Add support for PDF form field extraction
 - Enhance tag visualization with tag clouds

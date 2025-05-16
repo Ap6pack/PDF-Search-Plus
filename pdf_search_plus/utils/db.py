@@ -155,6 +155,27 @@ class PDFDatabase:
                     FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
                 )
             ''')
+            
+            # Annotations table for PDF annotations
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS annotations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pdf_id INTEGER NOT NULL,
+                    page_number INTEGER NOT NULL,
+                    x_coord REAL NOT NULL,
+                    y_coord REAL NOT NULL,
+                    width REAL NOT NULL,
+                    height REAL NOT NULL,
+                    content TEXT NOT NULL,
+                    annotation_type TEXT NOT NULL,
+                    color TEXT DEFAULT '#FFFF00',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Create index for annotations
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_annotations_pdf_page ON annotations(pdf_id, page_number)')
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS pages (

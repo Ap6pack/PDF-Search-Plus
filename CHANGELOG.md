@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.4.0] - 2025-05-16
+- Implemented PDF annotations support
+- Added document similarity search using TF-IDF and cosine similarity
+- Enhanced database schema with annotations table
+- Added document clustering functionality
+
 ## [2.3.0] - 2025-05-16
 - Implemented document categorization and tagging system
 - Enhanced database schema with tags and categories tables

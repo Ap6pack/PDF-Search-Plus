@@ -5,3 +5,5 @@ numpy>=1.26.0,<2.0         # Compatible with pandas 2.2.0 for Python 3.12
 psutil>=6.0.0,<6.1         # Compatible with safety 3.2.9
 cachetools>=4.2.0
 tqdm>=4.60.0
+scikit-learn>=1.3.0        # For TF-IDF and cosine similarity
+scipy>=1.11.0              # Required by scikit-learn
