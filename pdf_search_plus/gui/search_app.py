@@ -422,6 +422,8 @@ class PDFSearchApp:
             values = list(row)
             if len(values[3]) > 100:  # Truncate context if too long
                 values[3] = values[3][:100] + "..."
+            # Note: The database returns 6 columns but we only display 5 in the treeview
+            # The last_accessed column is used for sorting but not displayed
             self.tree.insert("", tk.END, values=values)
 
     def show_pdf_page(self, page_number: int) -> None:

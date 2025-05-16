@@ -5,6 +5,39 @@ All notable changes to the PDF-Search-Plus project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-05-16
+
+### Fixed
+- Fixed database error "1st ORDER BY term does not match any column in the result set" in search functionality
+- Fixed "no such column: T.content" error in FTS queries
+- Improved database query structure for more reliable searching
+- Enhanced database initialization to automatically validate and recreate if necessary
+- Updated `run_pdf_search.py` to handle database setup automatically
+
+### Changed
+- Simplified search queries to use LIKE operator with wildcards instead of FTS MATCH
+- Improved error handling in database operations
+- Enhanced command-line interface with better debugging information
+
+## [2.2.0] - 2025-05-15
+
+### Changed
+- Removed EasyOCR support, now using only Pytesseract for OCR on both Windows and Linux
+- Simplified OCR engine selection by standardizing on Tesseract
+
+## [2.1.0] - 2025-05-15
+
+### Changed
+- Major code refactoring to eliminate duplication
+- Consolidated PDF processing logic into a single implementation
+- Unified GUI implementation
+- Simplified entry points with a single runner script
+- Removed work-in-progress files
+
+### Added
+- Comprehensive refactoring plan (REFACTORING.md)
+- Improved documentation for the unified codebase
+
 ## [2.0.0] - 2025-05-15
 
 ### Added

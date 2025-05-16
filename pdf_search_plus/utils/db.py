@@ -353,38 +353,45 @@ class PDFDatabase:
         try:
             # Check if we should use the FTS tables (faster for large datasets)
             if use_fts:
-                # Use FTS5 for full-text search
-                query = """
+                # First, search in PDF text
+                query_pdf = """
                 SELECT 
                     pdf_files.id, 
                     pdf_files.file_name, 
-                    fts.page_number, 
+                    pages.page_number, 
                     pages.text, 
-                    fts.source
-                FROM fts_content AS fts
-                JOIN pdf_files ON fts.pdf_id = pdf_files.id
-                JOIN pages ON pages.pdf_id = fts.pdf_id AND pages.page_number = fts.page_number
-                WHERE fts.content MATCH ?
+                    'PDF Text' as source,
+                    pdf_files.last_accessed
+                FROM pages
+                JOIN pdf_files ON pages.pdf_id = pdf_files.id
+                WHERE pages.text LIKE ?
+                """
                 
-                UNION
-                
+                # Then, search in OCR text
+                query_ocr = """
                 SELECT 
                     pdf_files.id, 
                     pdf_files.file_name, 
-                    fts.page_number, 
+                    ocr_text.page_number, 
                     ocr_text.ocr_text, 
-                    fts.source
-                FROM fts_ocr AS fts
-                JOIN pdf_files ON fts.pdf_id = pdf_files.id
-                JOIN ocr_text ON ocr_text.pdf_id = fts.pdf_id AND ocr_text.page_number = fts.page_number
-                WHERE fts.content MATCH ?
+                    'OCR Text' as source,
+                    pdf_files.last_accessed
+                FROM ocr_text
+                JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
+                WHERE ocr_text.ocr_text LIKE ?
+                """
                 
-                ORDER BY pdf_files.last_accessed DESC
+                # Combine the results
+                query = f"""
+                {query_pdf}
+                UNION
+                {query_ocr}
+                ORDER BY last_accessed DESC
                 LIMIT ? OFFSET ?
                 """
-                # Format the search term for FTS5
-                fts_term = f"{sanitized_term}*"  # Add wildcard for prefix matching
-                params = (fts_term, fts_term, limit, offset)
+                # Format the search term for LIKE
+                like_term = f"%{sanitized_term}%"  # Use LIKE with wildcards
+                params = (like_term, like_term, limit, offset)
             else:
                 # Use LIKE for more flexible but slower search
                 query = """
@@ -393,7 +400,8 @@ class PDFDatabase:
                     pdf_files.file_name, 
                     pages.page_number, 
                     pages.text, 
-                    'PDF Text' as source
+                    'PDF Text' as source,
+                    pdf_files.last_accessed
                 FROM pages 
                 JOIN pdf_files ON pages.pdf_id = pdf_files.id 
                 WHERE pages.text LIKE ?
@@ -405,12 +413,13 @@ class PDFDatabase:
                     pdf_files.file_name, 
                     ocr_text.page_number, 
                     ocr_text.ocr_text, 
-                    'OCR Text' as source
+                    'OCR Text' as source,
+                    pdf_files.last_accessed
                 FROM ocr_text 
                 JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
                 WHERE ocr_text.ocr_text LIKE ?
                 
-                ORDER BY pdf_files.last_accessed DESC
+                ORDER BY last_accessed DESC
                 LIMIT ? OFFSET ?
                 """
                 params = (f'%{sanitized_term}%', f'%{sanitized_term}%', limit, offset)
@@ -430,7 +439,7 @@ class PDFDatabase:
             # Sanitize the results to prevent XSS
             sanitized_results = []
             for row in results:
-                pdf_id, file_name, page_number, text, source = row
+                pdf_id, file_name, page_number, text, source, last_accessed = row
                 sanitized_results.append((
                     pdf_id,
                     sanitize_text(file_name),
@@ -465,22 +474,23 @@ class PDFDatabase:
         try:
             # Check if we should use the FTS tables
             if use_fts:
-                # Use FTS5 for full-text search
                 query = """
                 SELECT COUNT(*) FROM (
                     SELECT 1
-                    FROM fts_content
-                    WHERE content MATCH ?
+                    FROM pages
+                    JOIN pdf_files ON pages.pdf_id = pdf_files.id
+                    WHERE pages.text LIKE ?
                     
                     UNION
                     
                     SELECT 1
-                    FROM fts_ocr
-                    WHERE content MATCH ?
+                    FROM ocr_text
+                    JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
+                    WHERE ocr_text.ocr_text LIKE ?
                 )
                 """
                 # Format the search term for FTS5
-                fts_term = f"{sanitized_term}*"  # Add wildcard for prefix matching
+                fts_term = f"%{sanitized_term}%"  # Use LIKE with wildcards
                 params = (fts_term, fts_term)
             else:
                 # Use LIKE for more flexible but slower search
@@ -488,13 +498,15 @@ class PDFDatabase:
                 SELECT COUNT(*) FROM (
                     SELECT 1
                     FROM pages
-                    WHERE text LIKE ?
+                    JOIN pdf_files ON pages.pdf_id = pdf_files.id
+                    WHERE pages.text LIKE ?
                     
                     UNION
                     
                     SELECT 1
                     FROM ocr_text
-                    WHERE ocr_text LIKE ?
+                    JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
+                    WHERE ocr_text.ocr_text LIKE ?
                 )
                 """
                 params = (f'%{sanitized_term}%', f'%{sanitized_term}%')
