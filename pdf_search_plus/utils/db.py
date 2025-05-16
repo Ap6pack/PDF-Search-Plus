@@ -1,5 +1,10 @@
 """
 Database utilities for the PDF Search Plus application.
+
+This module provides classes and functions for interacting with the SQLite database
+used to store PDF data, including text content, OCR results, and metadata.
+It includes functionality for creating the database schema, executing queries,
+and performing common operations like searching and retrieving PDF information.
 """
 
 import sqlite3
@@ -15,7 +20,18 @@ from pdf_search_plus.utils.security import sanitize_text, sanitize_search_term
 
 @dataclass
 class PDFMetadata:
-    """Store PDF metadata in a structured way"""
+    """
+    Store PDF metadata in a structured way.
+    
+    This class encapsulates metadata about a PDF file, including its name,
+    path, and optional ID. It also handles sanitization of the file name
+    and ensures the file path is stored as a string.
+    
+    Attributes:
+        file_name: The name of the PDF file (without extension)
+        file_path: The full path to the PDF file
+        id: Optional database ID for the PDF file
+    """
     file_name: str
     file_path: str
     id: Optional[int] = None
@@ -35,7 +51,13 @@ class PDFDatabase:
     Database manager for PDF Search Plus.
     
     This class provides methods for interacting with the SQLite database
-    used to store PDF data, including text and OCR results.
+    used to store PDF data, including text and OCR results. It handles
+    database creation, connection management, and provides methods for
+    common operations like searching, inserting, and retrieving data.
+    
+    The database schema includes tables for PDF files, pages, images,
+    and OCR text, as well as full-text search virtual tables for efficient
+    text searching.
     """
     
     def __init__(self, db_name: str = "pdf_data.db"):
@@ -63,7 +85,18 @@ class PDFDatabase:
             conn.close()
     
     def create_database(self) -> None:
-        """Create the SQLite database and tables for storing PDF data."""
+        """
+        Create the SQLite database and tables for storing PDF data.
+        
+        This method creates the following tables if they don't exist:
+        - pdf_files: Stores metadata for each processed PDF file
+        - pages: Stores text extracted from each PDF page
+        - images: Stores metadata about extracted images from PDFs
+        - ocr_text: Stores text extracted via OCR from images
+        
+        It also creates FTS5 virtual tables for full-text search and
+        appropriate indexes for better performance.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -75,6 +108,51 @@ class PDFDatabase:
                     file_path TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Tags table for document categorization
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    color TEXT DEFAULT '#808080',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Categories table (hierarchical organization)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    parent_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(parent_id) REFERENCES categories(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # PDF-Tag relationships (many-to-many)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS pdf_tags (
+                    pdf_id INTEGER,
+                    tag_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(pdf_id, tag_id),
+                    FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE,
+                    FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # PDF-Category relationships (many-to-many)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS pdf_categories (
+                    pdf_id INTEGER,
+                    category_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(pdf_id, category_id),
+                    FOREIGN KEY(pdf_id) REFERENCES pdf_files(id) ON DELETE CASCADE,
+                    FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
                 )
             ''')
 
@@ -109,29 +187,43 @@ class PDFDatabase:
                 )
             ''')
 
-            # Create a virtual table for full-text search
+            # Create optimized virtual tables for full-text search
             cursor.execute('''
                 CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
-                    pdf_id, page_number, content, source,
-                    content=pages, content_rowid=id
+                    pdf_id UNINDEXED,
+                    page_number UNINDEXED,
+                    content,
+                    source UNINDEXED,
+                    tokenize='porter unicode61'
                 )
             ''')
 
             cursor.execute('''
                 CREATE VIRTUAL TABLE IF NOT EXISTS fts_ocr USING fts5(
-                    pdf_id, page_number, content, source,
-                    content=ocr_text, content_rowid=id
+                    pdf_id UNINDEXED,
+                    page_number UNINDEXED,
+                    content,
+                    source UNINDEXED,
+                    tokenize='porter unicode61'
                 )
             ''')
 
-            # Create indexes for better performance
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_pdf_id ON pages(pdf_id)')
+            # Create optimized indexes for better performance
+            # Compound indexes for common query patterns
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_pdf_page ON pages(pdf_id, page_number)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ocr_pdf_page ON ocr_text(pdf_id, page_number)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_pdf_page ON images(pdf_id, page_number)')
+            
+            # Indexes for text search when not using FTS
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_pages_text ON pages(text)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ocr_text_pdf_id ON ocr_text(pdf_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ocr_text_ocr_text ON ocr_text(ocr_text)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_pdf_id ON images(pdf_id)')
+            
+            # Indexes for file lookup
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_pdf_files_file_name ON pdf_files(file_name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_pdf_files_file_path ON pdf_files(file_path)')
+            
+            # Index for sorting by last accessed
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pdf_files_last_accessed ON pdf_files(last_accessed DESC)')
 
             # Create a view for combined text
             cursor.execute('''
@@ -152,7 +244,7 @@ class PDFDatabase:
                     f.file_name
             ''')
 
-            # Create triggers to update FTS tables
+            # Optimized triggers to update FTS tables
             cursor.execute('''
                 CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
                     INSERT INTO fts_content(pdf_id, page_number, content, source)
@@ -168,9 +260,8 @@ class PDFDatabase:
 
             cursor.execute('''
                 CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
-                    DELETE FROM fts_content WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
-                    INSERT INTO fts_content(pdf_id, page_number, content, source)
-                    VALUES (new.pdf_id, new.page_number, new.text, 'PDF Text');
+                    UPDATE fts_content SET content = new.text
+                    WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
                 END
             ''')
 
@@ -189,9 +280,8 @@ class PDFDatabase:
 
             cursor.execute('''
                 CREATE TRIGGER IF NOT EXISTS ocr_text_au AFTER UPDATE ON ocr_text BEGIN
-                    DELETE FROM fts_ocr WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
-                    INSERT INTO fts_ocr(pdf_id, page_number, content, source)
-                    VALUES (new.pdf_id, new.page_number, new.ocr_text, 'OCR Text');
+                    UPDATE fts_ocr SET content = new.ocr_text
+                    WHERE pdf_id = old.pdf_id AND page_number = old.page_number;
                 END
             ''')
 
@@ -205,16 +295,23 @@ class PDFDatabase:
             conn.commit()
             print("Database and tables created successfully with indexes and FTS support.")
     
-    def execute_query(self, query: str, params: tuple = ()) -> Optional[List[Tuple]]:
+    def execute_query(self, query: str, params: tuple = ()) -> Optional[List[Tuple[Any, ...]]]:
         """
         Execute a SQL query and return the results.
         
+        This method executes the provided SQL query with the given parameters
+        and returns the results for SELECT queries. For non-SELECT queries,
+        it commits the changes and returns None.
+        
         Args:
             query: SQL query to execute
-            params: Parameters for the query
+            params: Parameters for the query to prevent SQL injection
             
         Returns:
-            Query results as a list of tuples, or None for non-SELECT queries
+            Query results as a list of tuples for SELECT queries, or None for non-SELECT queries
+            
+        Raises:
+            sqlite3.Error: If a database error occurs during execution
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -230,11 +327,18 @@ class PDFDatabase:
         """
         Insert metadata of the PDF file into the database.
         
+        This method inserts a new record into the pdf_files table with the
+        provided metadata. If the file has already been processed, you should
+        check with is_pdf_processed() before calling this method.
+        
         Args:
-            metadata: PDF metadata
+            metadata: PDF metadata containing file name and path
             
         Returns:
-            ID of the inserted PDF file
+            ID of the inserted PDF file (primary key)
+            
+        Raises:
+            sqlite3.Error: If a database error occurs during insertion
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -331,9 +435,14 @@ class PDFDatabase:
             result = cursor.fetchone()
             return result[0] if result else None
     
-    def search_text(self, search_term: str, use_fts: bool = True, limit: int = 100, offset: int = 0) -> List[Tuple]:
+    def search_text(self, search_term: str, use_fts: bool = True, 
+                   limit: int = 100, offset: int = 0) -> List[Tuple[int, str, int, str, str]]:
         """
         Search for text in both PDF text and OCR text.
+        
+        This method searches across all indexed PDF content and OCR-extracted text
+        for the specified search term. Results are paginated based on limit and offset.
+        The search term is sanitized to prevent SQL injection.
         
         Args:
             search_term: Text to search for
@@ -342,7 +451,17 @@ class PDFDatabase:
             offset: Number of results to skip (for pagination)
             
         Returns:
-            List of matching results
+            List of tuples containing (pdf_id, file_name, page_number, text, source)
+            where source indicates whether the match was found in PDF text or OCR text
+            
+        Raises:
+            sqlite3.Error: If a database error occurs during the search
+            
+        Example:
+            >>> db = PDFDatabase()
+            >>> results = db.search_text("important document", limit=10)
+            >>> for pdf_id, name, page, text, source in results:
+            ...     print(f"Found in {name}, page {page}: {text[:50]}...")
         """
         # Sanitize the search term to prevent SQL injection
         sanitized_term = sanitize_search_term(search_term)
@@ -353,44 +472,46 @@ class PDFDatabase:
         try:
             # Check if we should use the FTS tables (faster for large datasets)
             if use_fts:
-                # First, search in PDF text
-                query_pdf = """
+                # Use optimized FTS5 search with snippet function for context
+                query = """
                 SELECT 
                     pdf_files.id, 
                     pdf_files.file_name, 
-                    pages.page_number, 
-                    pages.text, 
+                    fts.page_number, 
+                    snippet(fts_content, 0, '<mark>', '</mark>', '...', 15) as text_snippet, 
                     'PDF Text' as source,
                     pdf_files.last_accessed
-                FROM pages
-                JOIN pdf_files ON pages.pdf_id = pdf_files.id
-                WHERE pages.text LIKE ?
-                """
+                FROM 
+                    fts_content as fts
+                JOIN 
+                    pdf_files ON fts.pdf_id = pdf_files.id
+                WHERE 
+                    fts_content MATCH ?
                 
-                # Then, search in OCR text
-                query_ocr = """
+                UNION
+                
                 SELECT 
                     pdf_files.id, 
                     pdf_files.file_name, 
-                    ocr_text.page_number, 
-                    ocr_text.ocr_text, 
+                    fts.page_number, 
+                    snippet(fts_ocr, 0, '<mark>', '</mark>', '...', 15) as text_snippet, 
                     'OCR Text' as source,
                     pdf_files.last_accessed
-                FROM ocr_text
-                JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
-                WHERE ocr_text.ocr_text LIKE ?
-                """
+                FROM 
+                    fts_ocr as fts
+                JOIN 
+                    pdf_files ON fts.pdf_id = pdf_files.id
+                WHERE 
+                    fts_ocr MATCH ?
                 
-                # Combine the results
-                query = f"""
-                {query_pdf}
-                UNION
-                {query_ocr}
-                ORDER BY last_accessed DESC
+                ORDER BY 
+                    last_accessed DESC
                 LIMIT ? OFFSET ?
                 """
-                # Use parameterized query with LIKE wildcards
-                params = (f"%{sanitized_term}%", f"%{sanitized_term}%", limit, offset)
+                
+                # Format search term for FTS5 MATCH
+                fts_term = f"{sanitized_term}*"  # Use stemming and prefix matching
+                params = (fts_term, fts_term, limit, offset)
             else:
                 # Use LIKE for more flexible but slower search
                 query = """
@@ -457,12 +578,19 @@ class PDFDatabase:
         """
         Get the total count of search results for pagination.
         
+        This method counts the total number of results that match the search term
+        without retrieving the actual results. This is useful for implementing
+        pagination in the user interface.
+        
         Args:
             search_term: Text to search for
-            use_fts: Whether to use full-text search
+            use_fts: Whether to use full-text search (faster but less flexible)
             
         Returns:
             Total number of matching results
+            
+        Raises:
+            sqlite3.Error: If a database error occurs during the count
         """
         # Sanitize the search term to prevent SQL injection
         sanitized_term = sanitize_search_term(search_term)
@@ -473,23 +601,23 @@ class PDFDatabase:
         try:
             # Check if we should use the FTS tables
             if use_fts:
+                # Use optimized FTS5 count query
                 query = """
                 SELECT COUNT(*) FROM (
                     SELECT 1
-                    FROM pages
-                    JOIN pdf_files ON pages.pdf_id = pdf_files.id
-                    WHERE pages.text LIKE ?
+                    FROM fts_content
+                    WHERE fts_content MATCH ?
                     
                     UNION
                     
                     SELECT 1
-                    FROM ocr_text
-                    JOIN pdf_files ON ocr_text.pdf_id = pdf_files.id
-                    WHERE ocr_text.ocr_text LIKE ?
+                    FROM fts_ocr
+                    WHERE fts_ocr MATCH ?
                 )
                 """
-                # Use parameterized query with LIKE wildcards
-                params = (f"%{sanitized_term}%", f"%{sanitized_term}%")
+                # Format search term for FTS5 MATCH
+                fts_term = f"{sanitized_term}*"  # Use stemming and prefix matching
+                params = (fts_term, fts_term)
             else:
                 # Use LIKE for more flexible but slower search
                 query = """
@@ -516,6 +644,3 @@ class PDFDatabase:
             # Log the error but don't expose details to the caller
             print(f"Database error: {e}")
             return 0
-
-
-# Legacy standalone functions have been deprecated in favor of the PDFDatabase class.
