@@ -56,10 +56,16 @@ class PDFSearchPlusApp:
         # Set up the database
         self.setup_database()
         
+        # Keep track of background threads
+        self.background_threads = []
+        
         # Create the main window
         self.root = tk.Tk()
         self.root.title("PDF Search Plus")
         self.root.geometry("400x200")
+        
+        # Set up window close handler
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Create the main application frame
         self.create_main_window()
@@ -273,10 +279,13 @@ class PDFSearchPlusApp:
                 return
                 
             # Process the folder in a separate thread to avoid freezing the UI
-            threading.Thread(
+            thread = threading.Thread(
                 target=self.process_pdf_folder,
-                args=(folder_path,)
-            ).start()
+                args=(folder_path,),
+                daemon=True  # Make thread a daemon so it exits when main thread exits
+            )
+            self.background_threads.append(thread)
+            thread.start()
         else:
             # Select a single PDF file
             pdf_path = filedialog.askopenfilename(
@@ -303,10 +312,13 @@ class PDFSearchPlusApp:
                 return
                 
             # Process the PDF in a separate thread to avoid freezing the UI
-            threading.Thread(
+            thread = threading.Thread(
                 target=self.process_pdf_file,
-                args=(pdf_path,)
-            ).start()
+                args=(pdf_path,),
+                daemon=True  # Make thread a daemon so it exits when main thread exits
+            )
+            self.background_threads.append(thread)
+            thread.start()
     
     def show_search_window(self) -> None:
         """Show the PDF search window."""
@@ -324,9 +336,42 @@ class PDFSearchPlusApp:
         # Wait for the window to be closed
         self.root.wait_window(search_window)
     
+    def on_closing(self):
+        """Handle window closing event."""
+        logger.info("Application closing, cleaning up resources...")
+        
+        # Clean up any resources
+        try:
+            # Join any non-daemon threads with a timeout
+            for thread in self.background_threads:
+                if thread.is_alive() and not thread.daemon:
+                    logger.info(f"Waiting for background thread to finish...")
+                    thread.join(0.5)  # Wait for 0.5 seconds max
+            
+            # Clean up the OCR processor resources
+            if hasattr(self.ocr_processor, '_cleanup_temp_directories'):
+                self.ocr_processor._cleanup_temp_directories()
+            
+            logger.info("Cleanup completed, closing application")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+        
+        # Destroy the root window
+        self.root.destroy()
+    
     def run(self) -> None:
         """Run the application."""
-        self.root.mainloop()
+        try:
+            self.root.mainloop()
+        except Exception as e:
+            logger.error(f"Error in main loop: {e}")
+        finally:
+            # Ensure cleanup happens even if mainloop exits unexpectedly
+            logger.info("Main loop exited, performing final cleanup")
+            
+            # Force cleanup of any remaining resources
+            if hasattr(self.ocr_processor, '_cleanup_temp_directories'):
+                self.ocr_processor._cleanup_temp_directories()
 
 
 def parse_args():

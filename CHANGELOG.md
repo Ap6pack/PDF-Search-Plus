@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.3] - 2025-05-16
+- Fixed Tesseract OCR process failure by redesigning temporary file management
+- Fixed application continuing to run after closure by implementing proper thread management
+- Added daemon threads to ensure background processes terminate when the application exits
+- Implemented window close handler with resource cleanup
+- Enhanced error handling and cleanup in the main application loop
+
 ## [2.4.2] - 2025-05-16
 - Fixed FTS5 search query to use correct column names
 - Corrected snippet function parameters for better search result highlighting
