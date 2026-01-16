@@ -1,0 +1,11 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/../shared_venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/stubs"
+  ],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.stubPath": "${workspaceFolder}/stubs",
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.useLibraryCodeForTypes": true
+}
