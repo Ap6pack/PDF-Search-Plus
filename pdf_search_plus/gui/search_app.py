@@ -3,23 +3,22 @@ GUI for the PDF Search Plus application.
 """
 
 import os
+import sqlite3
 import tkinter as tk
-from tkinter import ttk, messagebox, Canvas, filedialog
+from tkinter import ttk, messagebox, Canvas
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import threading
 import logging
-import time
-from typing import Optional, List, Tuple, Dict, Any
-from pathlib import Path
+from typing import Optional, List, Tuple, Any, Union
 
 from pdf_search_plus.utils.db import PDFDatabase
 from pdf_search_plus.utils.security import (
-    sanitize_text, sanitize_search_term, validate_file_path,
+    sanitize_search_term, validate_file_path,
     validate_pdf_file, validate_page_number, validate_zoom_factor
 )
 from pdf_search_plus.utils.cache import (
-    pdf_cache, image_cache, search_cache
+    pdf_cache, search_cache
 )
 from pdf_search_plus.utils.memory import (
     log_memory_usage, memory_usage_tracking, force_garbage_collection
@@ -30,31 +29,34 @@ class PDFSearchApp:
     """
     GUI application for searching and previewing PDF files.
     """
-    
-    def __init__(self, root: tk.Tk, db: Optional[PDFDatabase] = None):
+
+    def __init__(self, root: Union[tk.Tk, tk.Toplevel], db: Optional[PDFDatabase] = None):
         """
         Initialize the PDF Search application.
-        
+
         Args:
-            root: Tkinter root window
+            root: Tkinter root window or Toplevel window
             db: Database manager, or None to create a new one
         """
         self.root = root
         self.root.title("PDF Search and Preview")
         self.root.geometry("1000x700")  # Larger default window size
+        self.root.resizable(True, True)  # Enable window resizing (minimize/maximize)
 
         # PDF state
-        self.current_pdf = None
-        self.page_number = 1
-        self.total_pages = 0
-        self.zoom_factor = 1.0
+        self.current_pdf: Optional[str] = None
+        self.page_number: int = 1
+        self.total_pages: int = 0
+        self.zoom_factor: float = 1.0
+        self.current_image: Optional[Any] = None  # Keep reference to prevent garbage collection
 
         # Search state
-        self.current_search_term = ""
-        self.current_page = 0
-        self.results_per_page = 50  # Increased from 20 to 50 results per page
-        self.total_results = 0
-        self.use_fts = True  # Use full-text search by default
+        self.current_search_term: str = ""
+        self.current_page: int = 0
+        self.results_per_page: int = 50  # Increased from 20 to 50 results per page
+        self.total_results: int = 0
+        self.use_fts: bool = True  # Use full-text search by default
+        self.search_in_progress: bool = False  # Track if search is running
 
         # Database
         self.db = db or PDFDatabase()
@@ -95,7 +97,7 @@ class PDFSearchApp:
         
         # Create a dedicated frame for pagination with a border to make it stand out
         self.pagination_frame = tk.Frame(self.root, bd=2, relief=tk.RIDGE)
-        self.pagination_frame.grid(row=0, column=0, columnspan=8, padx=10, pady=(0, 10), sticky='ew')
+        self.pagination_frame.grid(row=1, column=0, columnspan=8, padx=10, pady=(0, 10), sticky='ew')
         
         # Add a label to clearly indicate pagination
         pagination_label = tk.Label(
@@ -192,12 +194,12 @@ class PDFSearchApp:
         self.tree.configure(yscrollcommand=tree_scroll.set)
         
         # Place treeview and scrollbar
-        self.tree.grid(row=1, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
-        tree_scroll.grid(row=1, column=4, sticky='ns', pady=10)
+        self.tree.grid(row=2, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
+        tree_scroll.grid(row=2, column=4, sticky='ns', pady=10)
 
         # Embedded PDF preview using a Canvas
         self.canvas_frame = tk.Frame(self.root)
-        self.canvas_frame.grid(row=1, column=5, columnspan=3, padx=10, pady=10, sticky='nsew')
+        self.canvas_frame.grid(row=2, column=5, columnspan=3, padx=10, pady=10, sticky='nsew')
         
         # Add scrollbars for canvas
         canvas_scroll_y = ttk.Scrollbar(self.canvas_frame, orient="vertical")
@@ -220,7 +222,7 @@ class PDFSearchApp:
 
         # Controls for page navigation, zoom, and preview
         frame_controls = tk.Frame(self.root)
-        frame_controls.grid(row=2, column=0, columnspan=8, pady=10)
+        frame_controls.grid(row=3, column=0, columnspan=8, pady=10)
 
         self.btn_prev = tk.Button(frame_controls, text="Previous Page", command=self.prev_page)
         self.btn_prev.grid(row=0, column=0, padx=5)
@@ -241,28 +243,32 @@ class PDFSearchApp:
         self.status_var = tk.StringVar()
         self.status_var.set("Ready")
         self.status_bar = tk.Label(self.root, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.status_bar.grid(row=3, column=0, columnspan=8, sticky='ew')
+        self.status_bar.grid(row=4, column=0, columnspan=8, sticky='ew')
 
         # Make sure the layout expands properly
-        self.root.grid_rowconfigure(1, weight=1)  # Make row 1 (tree and canvas) expandable
+        self.root.grid_rowconfigure(2, weight=1)  # Make row 2 (tree and canvas) expandable
         self.root.grid_columnconfigure(0, weight=1)  # Make treeview expand
         self.root.grid_columnconfigure(5, weight=1)  # Make canvas column expandable
 
     def get_pdf_path(self, pdf_id: int) -> Optional[str]:
         """
         Fetch the PDF file path for a given ID.
-        
+
         Args:
             pdf_id: ID of the PDF file
-            
+
         Returns:
             Path to the PDF file, or None if not found
         """
         try:
             return self.db.get_pdf_path(pdf_id)
-        except Exception as e:
-            self.logger.error(f"Database error: {e}")
-            messagebox.showerror("Database Error", str(e))
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error retrieving PDF path for ID {pdf_id}: {e}")
+            messagebox.showerror("Database Error", f"Failed to retrieve PDF information: {e}")
+            return None
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Invalid PDF ID: {pdf_id}, error: {e}")
+            messagebox.showerror("Invalid ID", "The selected PDF ID is invalid.")
             return None
 
     def load_pdf(self, pdf_path: str, page_number: int = 1) -> None:
@@ -285,18 +291,24 @@ class PDFSearchApp:
 
         try:
             self.current_pdf = pdf_path  # Store the current PDF path
-            doc = fitz.open(pdf_path)
+            doc: fitz.Document = fitz.open(pdf_path)
             self.total_pages = len(doc)  # Set the total number of pages
-            
+
             # Validate the page number
             self.page_number = validate_page_number(page_number, self.total_pages)
             self.show_pdf_page(page_number)
-            
+
             # Update status bar
             self.status_var.set(f"Loaded: {os.path.basename(pdf_path)} - Page {page_number} of {self.total_pages}")
-        except Exception as e:
-            self.logger.error(f"Error opening PDF: {e}")
-            messagebox.showerror("Error", "An error occurred while opening the PDF file.")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            self.logger.error(f"File system error opening PDF {pdf_path}: {e}")
+            messagebox.showerror("File Error", f"Cannot access PDF file: {e}")
+            self.current_pdf = None
+        except (RuntimeError, ValueError) as e:
+            # PyMuPDF raises RuntimeError for corrupted PDFs and ValueError for invalid files
+            self.logger.error(f"Invalid or corrupted PDF {pdf_path}: {e}")
+            messagebox.showerror("Invalid PDF", f"The PDF file appears to be corrupted or invalid: {e}")
+            self.current_pdf = None
 
     def preview_selected_pdf(self) -> None:
         """Preview the selected PDF and display the corresponding page."""
@@ -306,8 +318,8 @@ class PDFSearchApp:
             return
 
         selected_row = self.tree.item(selected_item)['values']
-        pdf_id = selected_row[0]
-        page_number = selected_row[2]  # This is the page number you want to preview
+        pdf_id = int(selected_row[0])
+        page_number = int(selected_row[2])  # This is the page number you want to preview
         pdf_path = self.get_pdf_path(pdf_id)
 
         if pdf_path:
@@ -408,8 +420,9 @@ class PDFSearchApp:
         
         # Check if we have cached results
         cache_key = f"{self.current_search_term}_{self.current_page}_{self.use_fts}"
-        cached_results = search_cache.get(cache_key)
-        
+        cached_value = search_cache.get(cache_key)
+        cached_results: Optional[List[Tuple[Any, ...]]] = cached_value if isinstance(cached_value, list) else None
+
         if cached_results:
             self.logger.info(f"Using cached search results for '{self.current_search_term}' page {self.current_page + 1}")
             self.update_treeview(cached_results)
@@ -424,88 +437,111 @@ class PDFSearchApp:
                     limit=self.results_per_page,
                     offset=offset
                 )
-                
+
                 # Cache the results
                 search_cache.put(cache_key, results)
-                
+
                 # Update the UI
                 self.update_treeview(results)
-                
+
                 # Update status bar with pagination info
                 offset = self.current_page * self.results_per_page
                 end_result = min(offset + len(results), self.total_results)
-                
+
                 # Update the tree heading to show search info
                 self.tree.heading("Context", text=f"Context (Showing {offset + 1}-{end_result} of {self.total_results} results)")
-        except Exception as e:
-            self.logger.error(f"Error loading search results: {e}")
-            messagebox.showerror("Error", "An error occurred while loading search results.")
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error loading search results: {e}")
+            messagebox.showerror("Database Error", f"Failed to retrieve search results: {e}")
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Invalid search parameters: {e}")
+            messagebox.showerror("Search Error", f"Invalid search parameters: {e}")
             
     def search_keywords(self) -> None:
         """Search the database for context in both PDF text and OCR-extracted text."""
+        # Check if a search is already in progress
+        if self.search_in_progress:
+            self.logger.info("Search already in progress, ignoring new request")
+            return
+
         # Get the search term from the entry field
         raw_search_term = self.context_entry.get()
-        
+
         # Validate and sanitize the search term
         if not raw_search_term:
             messagebox.showwarning("Empty Search", "Please enter a search term.")
             return
-        
+
         # Sanitize the search term to prevent SQL injection
         search_term = sanitize_search_term(raw_search_term)
         if not search_term:
             messagebox.showwarning("Invalid Search", "The search term contains invalid characters.")
             return
-            
+
+        # Mark search as in progress
+        self.search_in_progress = True
+
+        # Clear previous results
+        self.clear_tree()
+
         # Update search state
         self.current_search_term = search_term
         self.current_page = 0
         self.use_fts = self.use_fts_var.get()
-        
+
         # Reset tree headings
         self.tree.heading("Context", text="Context")
-        
+
         # Update status
         self.status_var.set(f"Searching for: {search_term}... This may take a moment for large result sets.")
         
         # Check if we have cached count
         count_cache_key = f"count_{search_term}_{self.use_fts}"
-        cached_count = search_cache.get(count_cache_key)
-        
-        def search_db():
+        cached_count_value: Optional[Union[int, List[Tuple[Any, ...]]]] = search_cache.get(count_cache_key)
+
+        def search_db() -> None:
             try:
                 # Get the total count of results for pagination
-                if cached_count is not None:
-                    self.total_results = cached_count
+                # Type narrow: count cache values are always int, not list
+                if cached_count_value is not None and isinstance(cached_count_value, int):
+                    self.total_results = cached_count_value
                     self.logger.info(f"Using cached count for '{search_term}': {self.total_results}")
                 else:
                     with memory_usage_tracking(f"Count results for '{search_term}'"):
                         self.total_results = self.db.get_search_count(search_term, use_fts=self.use_fts)
                         search_cache.put(count_cache_key, self.total_results)
-                
+
                 # Update pagination controls
                 self.root.after(0, self.update_pagination_controls)
-                
+
                 # Load the first page of results
                 self.root.after(0, self.load_search_results)
-                
+
                 # Force garbage collection after search
                 force_garbage_collection()
-                
-            except Exception as e:
-                self.logger.error(f"Database error: {e}")
-                # Don't expose detailed error messages to the user
-                self.root.after(0, lambda: messagebox.showerror("Database Error", "An error occurred while searching."))
-                self.root.after(0, lambda: self.status_var.set("Search error"))
 
-        threading.Thread(target=search_db).start()
+            except sqlite3.Error as e:
+                self.logger.error(f"Database error during search: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Database Error", f"Search failed: {e}"))
+                self.root.after(0, lambda: self.status_var.set("Search error - database issue"))
+            except (ValueError, TypeError) as e:
+                self.logger.error(f"Invalid search parameters: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Search Error", f"Invalid search: {e}"))
+                self.root.after(0, lambda: self.status_var.set("Search error - invalid parameters"))
+            finally:
+                # Always reset the search flag when done
+                self.root.after(0, lambda: setattr(self, 'search_in_progress', False))
 
-    def update_treeview(self, rows: List[Tuple]) -> None:
+        # Start search in a daemon thread so it doesn't block app shutdown
+        search_thread = threading.Thread(target=search_db, daemon=True)
+        search_thread.start()
+
+    def update_treeview(self, rows: List[Tuple[Any, ...]]) -> None:
         """
         Update the treeview with the search results.
-        
+
         Args:
-            rows: Search result rows
+            rows: Search result rows (tuples of: pdf_id, file_name, page_number, text, source)
         """
         self.clear_tree()
         if not rows:
@@ -550,69 +586,82 @@ class PDFSearchApp:
             
             # Check if we have a cached page image
             cache_key = f"{self.current_pdf}_{page_number}_{self.zoom_factor}"
-            cached_image = pdf_cache.get(cache_key)
-            
+            cached_image: Optional[ImageTk.PhotoImage] = pdf_cache.get(cache_key)
+
             if cached_image:
                 self.logger.info(f"Using cached page image for {os.path.basename(self.current_pdf)} page {page_number}")
-                img_tk = cached_image
-                
+                img_tk: ImageTk.PhotoImage = cached_image
+
                 # Configure canvas scrollregion
                 self.canvas.config(scrollregion=(0, 0, img_tk.width(), img_tk.height()))
-                
+
                 # Display the image in the canvas
                 self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
-                self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
-                
+                self.current_image = img_tk  # Keep a reference to avoid garbage collection
+
                 # Update status bar
                 self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {self.total_pages}")
                 return
             
             # Open the PDF file
             with memory_usage_tracking(f"Rendering PDF page {page_number}"):
-                doc = fitz.open(self.current_pdf)
-                
+                doc: fitz.Document = fitz.open(self.current_pdf)
+
                 # Validate page number
                 validated_page = validate_page_number(page_number, len(doc))
                 if validated_page != page_number:
                     page_number = validated_page
                     self.page_number = validated_page
-                
+
                 page_index = page_number - 1  # Page number starts from 1
-                page = doc.load_page(page_index)
-                
+                page: fitz.Page = doc.load_page(page_index)
+
                 # Validate zoom factor
                 validated_zoom = validate_zoom_factor(self.zoom_factor)
                 if validated_zoom != self.zoom_factor:
                     self.zoom_factor = validated_zoom
-                    
+
                 # Render the page
-                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
+                pix: fitz.Pixmap = page.get_pixmap(matrix=fitz.Matrix(self.zoom_factor, self.zoom_factor))
 
                 # Convert to a PIL Image
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img: Image.Image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
                 # Convert the image to ImageTk format for tkinter
-                img_tk = ImageTk.PhotoImage(img)
+                img_tk: ImageTk.PhotoImage = ImageTk.PhotoImage(img)
 
                 # Cache the rendered page
                 pdf_cache.put(cache_key, img_tk)
 
                 # Configure canvas scrollregion
                 self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
-                
+
                 # Display the image in the canvas
                 self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
-                self.canvas.image = img_tk  # Keep a reference to avoid garbage collection
-                
+                self.current_image = img_tk  # Keep a reference to avoid garbage collection
+
                 # Update status bar
                 self.status_var.set(f"Loaded: {os.path.basename(self.current_pdf)} - Page {page_number} of {len(doc)}")
                 
                 # Force garbage collection after rendering
                 force_garbage_collection()
-        except Exception as e:
-            self.logger.error(f"Error displaying PDF page: {e}")
-            # Don't expose detailed error messages to the user
-            messagebox.showerror("Error", "An error occurred while displaying the PDF page.")
+        except (FileNotFoundError, PermissionError) as e:
+            self.logger.error(f"File system error rendering PDF page {page_number}: {e}")
+            messagebox.showerror("File Error", f"Cannot access PDF file: {e}")
+            self.current_pdf = None
+        except (RuntimeError, ValueError) as e:
+            # PyMuPDF errors during rendering
+            self.logger.error(f"PDF rendering error on page {page_number}: {e}")
+            messagebox.showerror("Rendering Error", f"Failed to render PDF page: {e}")
+        except MemoryError as e:
+            # Memory exhaustion
+            self.logger.error(f"Out of memory rendering page {page_number}: {e}")
+            messagebox.showerror("Memory Error", "Insufficient memory to render PDF page.")
+            force_garbage_collection()  # Try to free up memory
+        except OSError as e:
+            # Other I/O or system errors
+            self.logger.error(f"System error rendering page {page_number}: {e}")
+            messagebox.showerror("System Error", f"System error while rendering PDF: {e}")
 
     def clear_tree(self) -> None:
         """Clear the treeview."""

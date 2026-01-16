@@ -3,11 +3,11 @@ Main entry point for the PDF Search Plus application.
 """
 
 import os
+import sqlite3
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import logging
 import threading
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -201,11 +201,26 @@ class PDFSearchPlusApp:
             logger.error(f"Validation error processing PDF {pdf_path}: {e}")
             self.status_var.set("Error: Invalid PDF file")
             messagebox.showerror("Validation Error", str(e))
-        except Exception as e:
-            # Handle other errors
-            logger.error(f"Error processing PDF {pdf_path}: {e}")
-            self.status_var.set("Error processing PDF")
-            messagebox.showerror("Error", "An error occurred while processing the PDF file.")
+        except (FileNotFoundError, PermissionError) as e:
+            # File system errors
+            logger.error(f"File access error processing PDF {pdf_path}: {e}")
+            self.status_var.set("Error: Cannot access PDF file")
+            messagebox.showerror("File Error", f"Cannot access PDF file: {e}")
+        except RuntimeError as e:
+            # PDF processing errors (corrupted files, OCR failures, etc.)
+            logger.error(f"PDF processing error for {pdf_path}: {e}")
+            self.status_var.set("Error: PDF processing failed")
+            messagebox.showerror("Processing Error", f"Failed to process PDF: {e}")
+        except sqlite3.Error as e:
+            # Database errors
+            logger.error(f"Database error storing PDF {pdf_path}: {e}")
+            self.status_var.set("Error: Database error")
+            messagebox.showerror("Database Error", f"Failed to store PDF data: {e}")
+        except OSError as e:
+            # Other I/O or system errors
+            logger.error(f"System error processing PDF {pdf_path}: {e}")
+            self.status_var.set("Error: System error")
+            messagebox.showerror("System Error", f"System error: {e}")
     
     def process_pdf_folder(self, folder_path: str) -> None:
         """
@@ -239,11 +254,26 @@ class PDFSearchPlusApp:
             logger.error(f"Validation error processing folder {folder_path}: {e}")
             self.status_var.set("Error: Invalid folder")
             messagebox.showerror("Validation Error", str(e))
-        except Exception as e:
-            # Handle other errors
-            logger.error(f"Error processing folder {folder_path}: {e}")
-            self.status_var.set("Error processing folder")
-            messagebox.showerror("Error", "An error occurred while processing the folder.")
+        except (FileNotFoundError, PermissionError) as e:
+            # Folder access errors
+            logger.error(f"Folder access error for {folder_path}: {e}")
+            self.status_var.set("Error: Cannot access folder")
+            messagebox.showerror("Folder Error", f"Cannot access folder: {e}")
+        except RuntimeError as e:
+            # Batch processing errors
+            logger.error(f"Error processing PDFs in folder {folder_path}: {e}")
+            self.status_var.set("Error: Batch processing failed")
+            messagebox.showerror("Processing Error", f"Failed to process folder: {e}")
+        except sqlite3.Error as e:
+            # Database errors
+            logger.error(f"Database error during folder processing {folder_path}: {e}")
+            self.status_var.set("Error: Database error")
+            messagebox.showerror("Database Error", f"Database error: {e}")
+        except OSError as e:
+            # System errors
+            logger.error(f"System error processing folder {folder_path}: {e}")
+            self.status_var.set("Error: System error")
+            messagebox.showerror("System Error", f"System error: {e}")
     
     def show_processing_dialog(self) -> None:
         """Show a dialog to select a PDF file or folder for processing."""

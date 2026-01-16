@@ -14,13 +14,19 @@ import functools
 import threading
 import psutil
 import logging
-from typing import Dict, Any, Callable, Optional, Tuple, List, TypeVar, Generic, Union
+from typing import Dict, Any, Callable, Optional, Tuple, List, TypeVar, Generic, Union, Protocol
 from pathlib import Path
 
 # Type variables for generic caching
 T = TypeVar('T')
 K = TypeVar('K')
 V = TypeVar('V')
+
+
+class MemoizedFunction(Protocol):
+    """Protocol for a memoized function with cache clearing capability."""
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+    def clear_cache(self) -> None: ...
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -398,42 +404,50 @@ class EnhancedDiskCache:
             self._save_metadata()
 
 
-def memoize(func: Callable) -> Callable:
+def memoize(func: Callable[..., T]) -> Callable[..., T]:
     """
     Decorator to memoize a function.
-    
+
     This caches the results of function calls to avoid redundant computation.
-    
+
     Args:
         func: Function to memoize
-        
+
     Returns:
-        Memoized function
+        Memoized function with clear_cache method
     """
-    cache: Dict[Tuple, Any] = {}
+    cache: Dict[Tuple[Any, ...], T] = {}
     lock = threading.RLock()
-    
+
     @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> T:
         # Create a key from the function arguments
         key = (args, tuple(sorted(kwargs.items())))
-        
+
         with lock:
             if key in cache:
                 return cache[key]
-                
+
             result = func(*args, **kwargs)
             cache[key] = result
             return result
-            
-    # Add a method to clear the cache
-    def clear_cache() -> None:
-        with lock:
-            cache.clear()
-            
-    wrapper.clear_cache = clear_cache  # type: ignore
-    
-    return wrapper
+
+    # Create a wrapper class that combines function and clear_cache method
+    class MemoizedWrapper:
+        """Wrapper class that provides both call and clear_cache functionality."""
+        def __call__(self, *args: Any, **kwargs: Any) -> T:
+            return wrapper(*args, **kwargs)
+
+        def clear_cache(self) -> None:
+            """Clear the memoization cache."""
+            with lock:
+                cache.clear()
+
+        # Forward common function attributes
+        __name__ = func.__name__
+        __doc__ = func.__doc__
+
+    return MemoizedWrapper()
 
 
 class SearchResultCache:
@@ -590,5 +604,5 @@ class TimedCache(Generic[K, V]):
 # Global cache instances with improved memory awareness
 pdf_cache = MemoryAwareLRUCache[str, Any](max_size=10, min_free_memory_mb=200)  # Cache for loaded PDFs
 image_cache = MemoryAwareLRUCache[str, Any](max_size=50, min_free_memory_mb=100)  # Cache for extracted images
-search_cache = TimedCache[str, List[Tuple]](ttl=300)  # Cache for search results with automatic expiration
+search_cache = TimedCache[str, Union[int, List[Tuple[Any, ...]]]](ttl=300)  # Cache for search results and counts with automatic expiration
 disk_cache = EnhancedDiskCache(cache_dir=".pdf_cache", max_size_mb=500, max_items=1000, compress=True)  # Enhanced disk cache

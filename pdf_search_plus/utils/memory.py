@@ -56,16 +56,19 @@ def log_memory_usage(message: str = "Memory usage") -> None:
 
 
 @contextmanager
-def memory_usage_tracking(message: str = "Operation") -> None:
+def memory_usage_tracking(message: str = "Operation") -> Iterator[None]:
     """
     Context manager to track memory usage before and after an operation.
-    
+
     Args:
         message: Description of the operation being tracked
+
+    Yields:
+        None
     """
     before = get_memory_usage()
     logger.info(f"{message} starting: RSS={before['rss']:.1f}MB")
-    
+
     try:
         yield
     finally:
@@ -105,14 +108,14 @@ class MemoryCheck:
     """
     
     def __init__(self, threshold_mb: float = 1000, check_interval: float = 5.0,
-                 action: Callable[[], None] = force_garbage_collection):
+                 action: Callable[[], Any] = force_garbage_collection):
         """
         Initialize the memory checker.
-        
+
         Args:
             threshold_mb: Memory threshold in MB
             check_interval: Check interval in seconds
-            action: Function to call when memory usage exceeds the threshold
+            action: Function to call when memory usage exceeds the threshold (return value ignored)
         """
         self.threshold_mb = threshold_mb
         self.check_interval = check_interval

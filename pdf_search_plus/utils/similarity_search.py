@@ -174,9 +174,10 @@ class SimilaritySearch:
                 raise
             
             # Calculate cosine similarity between the query document and all other documents
-            query_vector = tfidf_matrix[-1]
-            corpus_vectors = tfidf_matrix[:-1]
-            
+            # Note: scipy sparse matrices have indexing but type stubs are incomplete
+            query_vector = tfidf_matrix[-1]  # type: ignore[index]
+            corpus_vectors = tfidf_matrix[:-1]  # type: ignore[index]
+
             similarities = cosine_similarity(query_vector, corpus_vectors).flatten()
             
             # Create a list of (pdf_id, similarity) tuples
@@ -242,9 +243,10 @@ class SimilaritySearch:
                 raise
             
             # Calculate cosine similarity between the query text and all documents
-            query_vector = tfidf_matrix[-1]
-            corpus_vectors = tfidf_matrix[:-1]
-            
+            # Note: scipy sparse matrices have indexing but type stubs are incomplete
+            query_vector = tfidf_matrix[-1]  # type: ignore[index]
+            corpus_vectors = tfidf_matrix[:-1]  # type: ignore[index]
+
             similarities = cosine_similarity(query_vector, corpus_vectors).flatten()
             
             # Create a list of (pdf_id, similarity) tuples

@@ -1,0 +1,23 @@
+{
+  "include": [
+    "pdf_search_plus",
+    "run_pdf_search.py",
+    "db_setup.py"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".git",
+    "pre_refactor_backup",
+    "shared_venv",
+    "../shared_venv"
+  ],
+  "stubPath": "stubs",
+  "venvPath": "..",
+  "venv": "shared_venv",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.8",
+  "pythonPlatform": "Linux"
+}

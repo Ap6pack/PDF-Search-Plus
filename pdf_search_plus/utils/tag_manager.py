@@ -111,8 +111,10 @@ class TagManager:
                     (tag.name, tag.color)
                 )
                 conn.commit()
-                
+
                 tag_id = cursor.lastrowid
+                if tag_id is None:
+                    raise sqlite3.Error("Failed to retrieve tag ID after insert")
                 self.logger.info(f"Created tag '{tag.name}' with ID {tag_id}")
                 return tag_id
         except sqlite3.Error as e:
@@ -477,8 +479,10 @@ class TagManager:
                     (category.name, category.parent_id)
                 )
                 conn.commit()
-                
+
                 category_id = cursor.lastrowid
+                if category_id is None:
+                    raise sqlite3.Error("Failed to retrieve category ID after insert")
                 self.logger.info(f"Created category '{category.name}' with ID {category_id}")
                 return category_id
         except sqlite3.Error as e:

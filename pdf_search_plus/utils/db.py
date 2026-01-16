@@ -11,7 +11,7 @@ import sqlite3
 import contextlib
 import re
 import html
-from typing import Optional, List, Tuple, Dict, Any, Union
+from typing import Optional, List, Tuple, Dict, Any, Union, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,18 +35,19 @@ def create_database(db_name: str = "pdf_data.db") -> None:
 def get_connection(db_name: str = "pdf_data.db") -> sqlite3.Connection:
     """
     Get a connection to the SQLite database.
-    
+
     This function is maintained for backward compatibility.
-    It delegates to the PDFDatabase class method.
-    
+    Note: Caller is responsible for closing the connection.
+
     Args:
         db_name: Name of the database file
-        
+
     Returns:
         A SQLite connection object
     """
-    db = PDFDatabase(db_name)
-    return db.get_connection()
+    conn = sqlite3.connect(db_name, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 def execute_query(query: str, params: tuple = (), db_name: str = "pdf_data.db") -> Optional[List[Tuple]]:
     """
@@ -119,10 +120,10 @@ class PDFDatabase:
         self.db_name = db_name
     
     @contextlib.contextmanager
-    def get_connection(self) -> sqlite3.Connection:
+    def get_connection(self) -> Iterator[sqlite3.Connection]:
         """
         Context manager for database connections.
-        
+
         Yields:
             A SQLite connection object
         """
@@ -417,7 +418,10 @@ class PDFDatabase:
                 (metadata.file_name, metadata.file_path)
             )
             conn.commit()
-            return cursor.lastrowid
+            pdf_id = cursor.lastrowid
+            if pdf_id is None:
+                raise sqlite3.Error("Failed to retrieve PDF ID after insert")
+            return pdf_id
     
     def insert_page_text(self, pdf_id: int, page_number: int, text: str) -> None:
         """

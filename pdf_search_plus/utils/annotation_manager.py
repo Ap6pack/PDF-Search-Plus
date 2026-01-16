@@ -119,8 +119,10 @@ class AnnotationManager:
                     )
                 )
                 conn.commit()
-                
+
                 annotation_id = cursor.lastrowid
+                if annotation_id is None:
+                    raise sqlite3.Error("Failed to retrieve annotation ID after insert")
                 self.logger.info(f"Created annotation with ID {annotation_id} for PDF {annotation.pdf_id}")
                 return annotation_id
         except sqlite3.Error as e:
