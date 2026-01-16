@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.5] - 2026-01-16
+- Fixed GUI layout bug where pagination controls covered the search box
+- Added window resizing support (minimize/maximize buttons now functional)
+- Fixed search re-execution issue where subsequent searches would fail
+- Implemented comprehensive OCR timeout prevention system:
+  - Increased OCR timeout from 30 to 360 seconds for complex images
+  - Added aggressive image optimization (resize to 1000×1000, grayscale, contrast enhancement)
+  - Implemented pre-processing skip for very large images (>9 megapixels)
+  - Added faster Tesseract configuration (LSTM engine, optimized segmentation)
+  - Added detailed OCR timing and size logging for performance monitoring
+- Improved search state management with thread-safe flag to prevent concurrent searches
+- Enhanced pagination controls visibility in search results
+
 ## [2.4.4] - 2025-05-16
 - Significantly enhanced search results pagination with a dedicated navigation panel
 - Added First and Last page buttons for easier navigation through large result sets

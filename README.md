@@ -3,7 +3,7 @@
 <div align="center">
 
 ![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
-![Version](https://img.shields.io/badge/version-2.4.4-green)
+![Version](https://img.shields.io/badge/version-2.4.5-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
