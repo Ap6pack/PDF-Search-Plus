@@ -3,7 +3,6 @@ Main entry point for the PDF Search Plus application.
 """
 
 import os
-import argparse
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import logging
@@ -374,14 +373,6 @@ class PDFSearchPlusApp:
                 self.ocr_processor._cleanup_temp_directories()
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="PDF Search Plus - PDF text extraction and search with OCR"
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
     """
     Main entry point for the application.
@@ -395,5 +386,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    args = parse_args()
     main()

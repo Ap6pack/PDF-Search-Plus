@@ -1,11 +1,21 @@
 # Changelog
 
+## [2.4.4] - 2025-05-16
+- Significantly enhanced search results pagination with a dedicated navigation panel
+- Added First and Last page buttons for easier navigation through large result sets
+- Implemented dynamic button state management based on current page
+- Added clear visual indicators showing total results and current viewing range
+- Improved column headers to display result count information
+- Enhanced status bar with more detailed search information
+
 ## [2.4.3] - 2025-05-16
 - Fixed Tesseract OCR process failure by redesigning temporary file management
 - Fixed application continuing to run after closure by implementing proper thread management
 - Added daemon threads to ensure background processes terminate when the application exits
 - Implemented window close handler with resource cleanup
 - Enhanced error handling and cleanup in the main application loop
+- Improved search results pagination with better visibility and increased results per page
+- Enhanced status bar to clearly indicate pagination information for large result sets
 
 ## [2.4.2] - 2025-05-16
 - Fixed FTS5 search query to use correct column names

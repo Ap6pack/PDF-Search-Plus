@@ -52,7 +52,7 @@ class PDFSearchApp:
         # Search state
         self.current_search_term = ""
         self.current_page = 0
-        self.results_per_page = 20
+        self.results_per_page = 50  # Increased from 20 to 50 results per page
         self.total_results = 0
         self.use_fts = True  # Use full-text search by default
 
@@ -93,24 +93,81 @@ class PDFSearchApp:
             command=self.search_keywords
         ).grid(row=0, column=3, padx=10, pady=10)
         
-        # Pagination controls
-        self.pagination_frame = tk.Frame(frame_search)
-        self.pagination_frame.grid(row=0, column=4, padx=10, pady=10)
+        # Create a dedicated frame for pagination with a border to make it stand out
+        self.pagination_frame = tk.Frame(self.root, bd=2, relief=tk.RIDGE)
+        self.pagination_frame.grid(row=0, column=0, columnspan=8, padx=10, pady=(0, 10), sticky='ew')
         
-        tk.Button(
+        # Add a label to clearly indicate pagination
+        pagination_label = tk.Label(
             self.pagination_frame, 
-            text="Previous", 
-            command=self.prev_results_page
-        ).grid(row=0, column=0, padx=5)
+            text="SEARCH RESULTS NAVIGATION", 
+            font=("Helvetica", 10, "bold"),
+            fg="#0066cc"
+        )
+        pagination_label.grid(row=0, column=0, columnspan=5, padx=5, pady=5, sticky='w')
         
-        self.page_label = tk.Label(self.pagination_frame, text="Page 1 of 1")
-        self.page_label.grid(row=0, column=1, padx=5)
-        
-        tk.Button(
+        # Results count label
+        self.results_count_label = tk.Label(
             self.pagination_frame, 
-            text="Next", 
-            command=self.next_results_page
-        ).grid(row=0, column=2, padx=5)
+            text="No results", 
+            font=("Helvetica", 10),
+            fg="#333333"
+        )
+        self.results_count_label.grid(row=1, column=0, padx=5, pady=5, sticky='w')
+        
+        # Current page indicator
+        self.current_range_label = tk.Label(
+            self.pagination_frame, 
+            text="Showing: none", 
+            font=("Helvetica", 10),
+            fg="#333333"
+        )
+        self.current_range_label.grid(row=1, column=1, padx=5, pady=5, sticky='w')
+        
+        # Navigation buttons with improved styling
+        self.btn_first_page = tk.Button(
+            self.pagination_frame, 
+            text="⏮ First", 
+            command=self.first_results_page,
+            bg="#e1e1e1",
+            width=8
+        )
+        self.btn_first_page.grid(row=1, column=2, padx=5, pady=5)
+        
+        self.btn_prev_page = tk.Button(
+            self.pagination_frame, 
+            text="◀ Previous", 
+            command=self.prev_results_page,
+            bg="#e1e1e1",
+            width=10
+        )
+        self.btn_prev_page.grid(row=1, column=3, padx=5, pady=5)
+        
+        self.page_label = tk.Label(
+            self.pagination_frame, 
+            text="Page 1 of 1", 
+            font=("Helvetica", 10, "bold"),
+            width=15
+        )
+        self.page_label.grid(row=1, column=4, padx=5, pady=5)
+        
+        self.btn_next_page = tk.Button(
+            self.pagination_frame, 
+            text="Next ▶", 
+            command=self.next_results_page,
+            bg="#e1e1e1",
+            width=10
+        )
+        self.btn_next_page.grid(row=1, column=5, padx=5, pady=5)
+        
+        self.btn_last_page = tk.Button(
+            self.pagination_frame, 
+            text="Last ⏭", 
+            command=self.last_results_page,
+            bg="#e1e1e1",
+            width=8
+        )
+        self.btn_last_page.grid(row=1, column=6, padx=5, pady=5)
         
         # Initially hide pagination controls
         self.pagination_frame.grid_remove()
@@ -284,6 +341,18 @@ class PDFSearchApp:
         self.show_pdf_page(self.page_number)
         self.status_var.set(f"Zoom: {int(self.zoom_factor * 100)}%")
 
+    def first_results_page(self) -> None:
+        """Go to the first page of search results."""
+        if self.current_page > 0:
+            self.current_page = 0
+            self.load_search_results()
+    
+    def last_results_page(self) -> None:
+        """Go to the last page of search results."""
+        if self.current_page < self.total_pages - 1:
+            self.current_page = self.total_pages - 1
+            self.load_search_results()
+    
     def next_results_page(self) -> None:
         """Go to the next page of search results."""
         if self.current_page < self.total_pages - 1:
@@ -300,10 +369,34 @@ class PDFSearchApp:
         """Update the pagination controls based on current search state."""
         if self.total_results > 0:
             self.total_pages = (self.total_results + self.results_per_page - 1) // self.results_per_page
+            
+            # Update page label
             self.page_label.config(text=f"Page {self.current_page + 1} of {self.total_pages}")
-            self.pagination_frame.grid()  # Show pagination controls
+            
+            # Update results count
+            self.results_count_label.config(text=f"Total results: {self.total_results}")
+            
+            # Update current range
+            offset = self.current_page * self.results_per_page
+            end_result = min(offset + self.results_per_page, self.total_results)
+            self.current_range_label.config(text=f"Showing: {offset + 1}-{end_result}")
+            
+            # Enable/disable navigation buttons based on current page
+            self.btn_first_page.config(state=tk.NORMAL if self.current_page > 0 else tk.DISABLED)
+            self.btn_prev_page.config(state=tk.NORMAL if self.current_page > 0 else tk.DISABLED)
+            self.btn_next_page.config(state=tk.NORMAL if self.current_page < self.total_pages - 1 else tk.DISABLED)
+            self.btn_last_page.config(state=tk.NORMAL if self.current_page < self.total_pages - 1 else tk.DISABLED)
+            
+            # Show pagination controls
+            self.pagination_frame.grid()
+            
+            # Update status bar
+            self.status_var.set(
+                f"Search complete: Found {self.total_results} results for '{self.current_search_term}'"
+            )
         else:
             self.pagination_frame.grid_remove()  # Hide pagination controls
+            self.status_var.set(f"No results found for: {self.current_search_term}")
             
     def load_search_results(self) -> None:
         """Load the current page of search results."""
@@ -337,10 +430,13 @@ class PDFSearchApp:
                 
                 # Update the UI
                 self.update_treeview(results)
-                self.status_var.set(
-                    f"Showing results {offset + 1}-{offset + len(results)} of {self.total_results} "
-                    f"for: {self.current_search_term}"
-                )
+                
+                # Update status bar with pagination info
+                offset = self.current_page * self.results_per_page
+                end_result = min(offset + len(results), self.total_results)
+                
+                # Update the tree heading to show search info
+                self.tree.heading("Context", text=f"Context (Showing {offset + 1}-{end_result} of {self.total_results} results)")
         except Exception as e:
             self.logger.error(f"Error loading search results: {e}")
             messagebox.showerror("Error", "An error occurred while loading search results.")
@@ -366,8 +462,11 @@ class PDFSearchApp:
         self.current_page = 0
         self.use_fts = self.use_fts_var.get()
         
+        # Reset tree headings
+        self.tree.heading("Context", text="Context")
+        
         # Update status
-        self.status_var.set(f"Searching for: {search_term}...")
+        self.status_var.set(f"Searching for: {search_term}... This may take a moment for large result sets.")
         
         # Check if we have cached count
         count_cache_key = f"count_{search_term}_{self.use_fts}"

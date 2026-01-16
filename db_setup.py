@@ -21,6 +21,8 @@ def setup_database(db_name="pdf_data.db"):
             print(f"Warning: Could not remove existing database: {e}")
     
     # Create a new database with the latest schema
+    # Note: Explicitly passing db_name to support custom database names
+    # Other parts of the application use PDFDatabase() without arguments (relies on default)
     db = PDFDatabase(db_name)
     db.create_database()
     print(f"Database {db_name} created successfully with the latest schema.")

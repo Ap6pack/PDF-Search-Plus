@@ -3,7 +3,7 @@
 <div align="center">
 
 ![PDF Search Plus Logo](https://img.shields.io/badge/PDF-Search%20Plus-blue)
-![Version](https://img.shields.io/badge/version-2.4.0-green)
+![Version](https://img.shields.io/badge/version-2.4.4-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -14,6 +14,7 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 - [Features](#features)
 - [Installation](#installation)
+  - [Prerequisites](#prerequisites)
   - [Setup](#setup)
   - [Tesseract OCR Installation](#tesseract-ocr-installation)
 - [Python Dependencies](#python-dependencies)
@@ -27,6 +28,9 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
+- [Document Tagging and Categorization](#document-tagging-and-categorization)
+- [PDF Annotations](#pdf-annotations)
+- [Document Similarity Search](#document-similarity-search)
 - [Future Enhancements](#future-enhancements)
 
 ## Features
@@ -49,12 +53,21 @@ PDF Search Plus is a powerful Python application that processes PDF files by ext
 
 ## Installation
 
+### Prerequisites
+
+**Python Version**: This application requires Python 3.8 or higher. It has been tested and confirmed to work with Python 3.8 through 3.13.
+
+You can check your Python version with:
+```bash
+python --version
+```
+
 ### Setup
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Ap6pack/pdf-search-plus.git
-   cd pdf-search-plus
+   git clone https://github.com/Ap6pack/PDF-Search-Plus.git
+   cd PDF-Search-Plus
    ```
 
 2. Install the dependencies:
@@ -105,6 +118,14 @@ python run_pdf_search.py
 ```
 
 The database will be automatically created or validated when you run the application. No separate setup steps are required.
+
+**Note:** If you need to recreate the database from scratch (e.g., after schema changes or corruption), you can use the `db_setup.py` utility:
+
+```bash
+python db_setup.py
+```
+
+This will delete the existing database and create a fresh one with the latest schema. This is rarely needed during normal operation.
 
 #### Command Line Options
 
@@ -226,7 +247,20 @@ The application stores PDF data in an SQLite database called `pdf_data.db` with 
   - `pdf_id`: Foreign key to pdf_files
   - `page_number`: Page number
   - `ocr_text`: Text extracted via OCR
-  
+
+- **annotations**: Stores PDF annotations (highlights, notes, etc.)
+  - `id`: Primary key
+  - `pdf_id`: Foreign key to pdf_files
+  - `page_number`: Page number where annotation appears
+  - `x_coord`: X coordinate of annotation position
+  - `y_coord`: Y coordinate of annotation position
+  - `width`: Width of annotation area
+  - `height`: Height of annotation area
+  - `content`: Annotation text content
+  - `annotation_type`: Type of annotation (highlight, note, underline, etc.)
+  - `color`: Color of annotation (hex code, default: #FFFF00)
+  - `created_at`: Timestamp when annotation was created
+
 - **tags**: Stores document tags for categorization
   - `id`: Primary key
   - `name`: Tag name

@@ -108,31 +108,13 @@ def process_folder(folder_path, db, max_workers=5):
 def search_database(search_term, db):
     """Search the database for the given term."""
     try:
-        # Debug: Print the SQL query
-        print("Debugging search query:")
-        
-        # Get the SQL query from the search_text method
-        # This is a hack to get the query without executing it
-        original_execute_query = db.execute_query
-        
-        def debug_execute_query(query, params=(), *args, **kwargs):
-            print(f"SQL Query: {query}")
-            print(f"Params: {params}")
-            return original_execute_query(query, params, *args, **kwargs)
-        
-        # Replace the execute_query method temporarily
-        db.execute_query = debug_execute_query
-        
         # Execute the search
         results = db.search_text(search_term, use_fts=True, limit=100, offset=0)
-        
-        # Restore the original execute_query method
-        db.execute_query = original_execute_query
-        
+
         if not results:
             print(f"No results found for '{search_term}'")
             return
-        
+
         print(f"Found {len(results)} results for '{search_term}':")
         for i, result in enumerate(results, 1):
             pdf_id, file_name, page_number, text, source = result

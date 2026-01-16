@@ -1,9 +1,9 @@
 PyMuPDF>=1.18.0
-Pillow>=9.2.0,<11.0        # Compatible with moviepy 2.1.2
+Pillow>=9.2.0,<11.0        # Version constraint to avoid compatibility issues
 threaded>=4.1.0
-numpy>=1.26.0,<2.0         # Compatible with pandas 2.2.0 for Python 3.12
-psutil>=6.0.0,<6.1         # Compatible with safety 3.2.9
+numpy>=1.26.0,<2.0         # Required <2.0 for stability with scientific computing packages
+psutil>=6.0.0,<6.1         # Memory monitoring for cache management
 cachetools>=4.2.0
 tqdm>=4.60.0
-scikit-learn>=1.3.0        # For TF-IDF and cosine similarity
+scikit-learn>=1.3.0        # For TF-IDF and cosine similarity in document search
 scipy>=1.11.0              # Required by scikit-learn
